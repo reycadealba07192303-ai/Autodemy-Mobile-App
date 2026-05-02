@@ -15,21 +15,27 @@ class SocketService {
 
   static void _init() {
     final String socketUrl = ApiService.baseUrl.replaceAll('/api', '');
+    print('SOCKET: Attempting connection to $socketUrl');
+
     _socket = IO.io(socketUrl, IO.OptionBuilder()
       .setTransports(['websocket'])
-      .disableAutoConnect()
+      .enableAutoConnect() // Enable auto-connect
+      .setReconnectionAttempts(10)
+      .setReconnectionDelay(2000)
       .build());
     
     _socket!.onConnect((_) {
-      print('Connected to Socket.io Server');
+      print('SOCKET: 🟢 Connected to Socket.io Server');
       // Re-join all rooms on reconnect
       for (var room in _rooms) {
         _socket!.emit('join_room', room);
+        print('SOCKET: Re-joined room: $room');
       }
     });
 
-    _socket!.onDisconnect((_) => print('Disconnected from Socket.io Server'));
-    _socket!.onConnectError((err) => print('Socket Connect Error: $err'));
+    _socket!.onDisconnect((_) => print('SOCKET: 🔴 Disconnected from Server'));
+    _socket!.onConnectError((err) => print('SOCKET: ⚠️ Connection Error: $err'));
+    _socket!.onReconnect((_) => print('SOCKET: 🔄 Reconnecting...'));
     
     _socket!.connect();
   }
@@ -37,8 +43,11 @@ class SocketService {
   static void joinRoom(String room) {
     if (room.isEmpty) return;
     _rooms.add(room);
-    if (socket.connected) {
-      socket.emit('join_room', room);
+    if (_socket != null && _socket!.connected) {
+      _socket!.emit('join_room', room);
+      print('SOCKET: Joined room $room');
+    } else {
+      print('SOCKET: Pending join room $room (waiting for connection)');
     }
   }
 

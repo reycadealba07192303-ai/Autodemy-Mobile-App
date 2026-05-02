@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // TIP: Use your Local IP so BOTH emulator and phone can connect.
-  static const String baseUrl = 'http://192.168.100.4:5000/api'; 
+  static const String baseUrl = 'https://autodemy-mobile-app.onrender.com/api'; 
   static Map<String, dynamic>? _cachedUser;
 
   static Future<void> setToken(String token) async {
@@ -54,6 +54,20 @@ class ApiService {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
     };
+  }
+
+  static Future<dynamic> get(String endpoint) async {
+    final headers = await _getHeaders();
+    final response = await http.get(Uri.parse('$baseUrl$endpoint'), headers: headers);
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw Exception('GET $endpoint failed: ${response.statusCode}');
+  }
+
+  static Future<dynamic> post(String endpoint, Map<String, dynamic> data) async {
+    final headers = await _getHeaders();
+    final response = await http.post(Uri.parse('$baseUrl$endpoint'), headers: headers, body: jsonEncode(data));
+    if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+    throw Exception('POST $endpoint failed: ${response.statusCode}');
   }
 
   static Future<Map<String, dynamic>?> login(String username, String password) async {

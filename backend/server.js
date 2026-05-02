@@ -81,6 +81,45 @@ const AcademicYear = require('./models/AcademicYear');
 const Concern = require('./models/Concern');
 const Message = require('./models/Message');
 
+// New Announcement Model
+const announcementSchema = new mongoose.Schema({
+    title: String,
+    description: String,
+    time: String,
+    location: String,
+    dateTime: Date,
+    invitedSections: [String],
+    targetType: String,
+    authorName: String,
+    authorRole: String,
+    createdAt: { type: Date, default: Date.now }
+});
+const Announcement = mongoose.model('Announcement', announcementSchema);
+
+// Socket.io Logic
+io.on('connection', (socket) => {
+    console.log('User connected:', socket.id);
+
+    socket.on('join_room', (room) => {
+        socket.join(room);
+        console.log(`User ${socket.id} joined room: ${room}`);
+    });
+
+    socket.on('send_notification', (data) => {
+        const { room } = data;
+        if (room) {
+            io.to(room).emit('receive_notification', data);
+            console.log(`Notification sent to room ${room}: ${data.title}`);
+        } else {
+            socket.broadcast.emit('receive_notification', data);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+    });
+});
+
 // Helper to seed initial data
 async function seedData() {
     const adminExists = await User.findOne({ username: 'admin' });
@@ -943,6 +982,33 @@ app.put('/api/admin/users/:userId/password', verifyToken, async (req, res) => {
     }
 });
 
+
+// Announcement Routes
+app.post('/api/announcements/publish', verifyToken, async (req, res) => {
+    try {
+        const announcement = await Announcement.create(req.body);
+        res.status(201).json(announcement);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+app.get('/api/announcements', verifyToken, async (req, res) => {
+    try {
+        const { section } = req.query;
+        // Filter: invited ALL, or specific section
+        const announcements = await Announcement.find({
+            $or: [
+                { invitedSections: 'ALL' },
+                { invitedSections: section },
+                { invitedSections: { $size: 0 } }
+            ]
+        }).sort({ dateTime: -1 });
+        res.json(announcements);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);

@@ -647,16 +647,11 @@ class UserDetailScreen extends StatefulWidget {
 class _UserDetailScreenState extends State<UserDetailScreen> {
   List<dynamic> _teacherSections = [];
   bool _isLoadingSections = false;
-  bool _isLoadingAnalytics = false;
-  Map<String, dynamic> _analytics = {'presentPercent': '0%', 'lates': 0, 'absents': 0};
-
   @override
   void initState() {
     super.initState();
     if (widget.userType == 'Teacher') {
       _fetchTeacherSections();
-    } else {
-      _fetchStudentAnalytics();
     }
   }
 
@@ -674,16 +669,6 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingSections = false);
-    }
-  }
-
-  Future<void> _fetchStudentAnalytics() async {
-    setState(() => _isLoadingAnalytics = true);
-    try {
-      final data = await ApiService.getStudentAnalytics(widget.userData['id_db']!);
-      if (mounted) setState(() { _analytics = data; _isLoadingAnalytics = false; });
-    } catch (e) {
-      if (mounted) setState(() => _isLoadingAnalytics = false);
     }
   }
 

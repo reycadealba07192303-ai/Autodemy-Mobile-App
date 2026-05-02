@@ -20,9 +20,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       'icon': Icons.fingerprint_rounded,
     },
     {
-      'title': 'Comprehensive Reports',
-      'subtitle': 'Generate automated analytics and detailed historical logs for easy monitoring.',
-      'icon': Icons.analytics_rounded,
+      'title': 'Real-time Alerts',
+      'subtitle': 'Stay updated with instant notifications for announcements and attendance updates.',
+      'icon': Icons.notifications_active_rounded,
     },
     {
       'title': 'Intelligent Management',

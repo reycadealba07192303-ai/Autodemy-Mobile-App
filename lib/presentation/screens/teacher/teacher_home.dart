@@ -59,11 +59,10 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         subtitle: 'Hi, ${widget.teacherName}!',
         userRole: 'TEACHER',
       ),
-      labels: const ['Home', 'Concerns', 'Analytics', 'Calendar', 'Profile'],
+      labels: const ['Home', 'Concerns', 'Calendar', 'Profile'],
       icons: const [
         Icons.dashboard_rounded,
         Icons.support_agent_rounded,
-        Icons.bar_chart_rounded,
         Icons.calendar_month_rounded,
         Icons.person_rounded,
       ],
@@ -74,11 +73,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             : _buildHomePage(),
         // ─── TAB 1: CONCERNS ──────────────────────────────────────────
         const TeacherConcernsScreen(),
-        // ─── TAB 2: ANALYTICS ──────────────────────────────────────────
-        const TeacherAnalyticsScreen(),
-        // ─── TAB 3: CALENDAR ──────────────────────────────────────────
+        // ─── TAB 2: CALENDAR ──────────────────────────────────────────
         const CalendarScreen(embedded: true),
-        // ─── TAB 4: PROFILE ───────────────────────────────────────────
+        // ─── TAB 3: PROFILE ───────────────────────────────────────────
         ProfileScreen(
           userName: widget.teacherName,
           userRole: 'Teacher',

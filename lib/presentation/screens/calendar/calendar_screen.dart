@@ -39,19 +39,56 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   List<CalendarEvent> _getEventsForDay(DateTime day) {
     final normalizedDay = DateTime(day.year, day.month, day.day);
-    final rawList = AppData.calendarEvents[normalizedDay] ?? [];
-    return rawList.map((e) => CalendarEvent(
+    
+    // 1. Get local/manual events
+    final List<CalendarEvent> events = (AppData.calendarEvents[normalizedDay] ?? []).map((e) => CalendarEvent(
       title: e['title'],
       time: e['time'],
       location: e['location'],
       description: e['description'],
     )).toList();
+
+    // 2. Add cloud announcements for this day
+    final cloudEvents = _cloudAnnouncements.where((a) {
+      if (a['dateTime'] == null) return false;
+      final dt = (a['dateTime'] is DateTime) ? a['dateTime'] : DateTime.tryParse(a['dateTime'].toString());
+      if (dt == null) return false;
+      return dt.year == day.year && dt.month == day.month && dt.day == day.day;
+    }).map((a) => CalendarEvent(
+      title: a['title'] ?? 'Announcement',
+      time: a['time'] ?? 'All Day',
+      location: a['location'] ?? 'Campus',
+      description: a['description'] ?? '',
+    ));
+
+    events.addAll(cloudEvents);
+    return events;
   }
+
+  List<dynamic> _cloudAnnouncements = [];
+  bool _isLoadingCloud = true;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
+    _fetchCloudEvents();
+  }
+
+  Future<void> _fetchCloudEvents() async {
+    try {
+      final user = await ApiService.getUserData();
+      final section = user?['section'] ?? 'ALL';
+      final events = await AnnouncementService.getAnnouncements(section);
+      if (mounted) {
+        setState(() {
+          _cloudAnnouncements = events;
+          _isLoadingCloud = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingCloud = false);
+    }
   }
 
   @override
