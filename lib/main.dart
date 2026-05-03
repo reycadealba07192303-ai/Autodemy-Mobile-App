@@ -108,25 +108,65 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
   Widget build(BuildContext context) => widget.child;
 }
 
-class AutodemyApp extends StatelessWidget {
+class AutodemyApp extends StatefulWidget {
   final bool showBiometrics;
   const AutodemyApp({super.key, this.showBiometrics = false});
 
   @override
-  Widget build(BuildContext context) {
-    Widget homeScreen = const SplashScreen();
-    
-    // Only wrap with BiometricLockScreen if enabled in profile
-    if (showBiometrics) {
-      homeScreen = BiometricLockScreen(child: const SplashScreen());
-    }
+  State<AutodemyApp> createState() => _AutodemyAppState();
+}
 
+class _AutodemyAppState extends State<AutodemyApp> with WidgetsBindingObserver {
+  bool _isLocked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.showBiometrics) {
+      WidgetsBinding.instance.addObserver(this);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!widget.showBiometrics) return;
+
+    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+      // App is going to background, lock it immediately for privacy
+      setState(() {
+        _isLocked = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: scaffoldMessengerKey,
       title: 'Autodemy',
       theme: AppTheme.lightTheme,
-      home: homeScreen,
+      home: const SplashScreen(),
+      builder: (context, child) {
+        if (widget.showBiometrics && child != null) {
+          return BiometricLockScreen(
+            key: _isLocked ? UniqueKey() : null,
+            onUnlocked: () {
+              setState(() {
+                _isLocked = false;
+              });
+            },
+            child: child,
+          );
+        }
+        return child ?? const SizedBox.shrink();
+      },
     );
   }
 }

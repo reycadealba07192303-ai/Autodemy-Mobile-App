@@ -4,7 +4,9 @@ import '../../../core/theme/app_theme.dart';
 
 class BiometricLockScreen extends StatefulWidget {
   final Widget child; // The screen to show after successful auth
-  const BiometricLockScreen({super.key, required this.child});
+  final bool isOverlay; // Whether this is showing as a privacy overlay
+  final VoidCallback? onUnlocked;
+  const BiometricLockScreen({super.key, required this.child, this.isOverlay = false, this.onUnlocked});
 
   @override
   State<BiometricLockScreen> createState() => _BiometricLockScreenState();
@@ -18,13 +20,23 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> with SingleTi
 
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
+  late Animation<double> _pulseAnim;
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeInOut);
-    _animController.forward();
+    _animController = AnimationController(
+      vsync: this, 
+      duration: const Duration(milliseconds: 1500)
+    )..repeat(reverse: true);
+    
+    _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animController, curve: const Interval(0.0, 0.5, curve: Curves.easeIn))
+    );
+    
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.1).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeInOut)
+    );
     
     // Automatically trigger auth on start
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -46,11 +58,10 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> with SingleTi
     });
 
     try {
-      // biometricOnly: false allows the OS to fallback to PIN/Pattern/Password automatically
       final didAuth = await _auth.authenticate(
-        localizedReason: 'Please verify your identity to access Autodemy',
+        localizedReason: 'Secure Identity Verification Required',
         options: const AuthenticationOptions(
-          biometricOnly: false,
+          biometricOnly: true, // Force biometric for the "premium" feel requested
           stickyAuth: true,
           useErrorDialogs: true,
         ),
@@ -58,13 +69,24 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> with SingleTi
 
       if (didAuth) {
         setState(() => _isAuthenticated = true);
+        widget.onUnlocked?.call();
       } else {
-        setState(() => _errorMessage = 'Authentication cancelled or failed.');
+        setState(() => _errorMessage = 'Authentication required to proceed.');
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Security error: Your device might not have a lock set up.';
-      });
+      // Fallback if biometric fails or not available
+      try {
+        final didAuthFallback = await _auth.authenticate(
+          localizedReason: 'Please verify your identity',
+          options: const AuthenticationOptions(
+            biometricOnly: false,
+            stickyAuth: true,
+          ),
+        );
+        if (didAuthFallback) setState(() => _isAuthenticated = true);
+      } catch (e2) {
+        setState(() => _errorMessage = 'Security System Error: Device lock not configured.');
+      }
     } finally {
       setState(() => _isAuthenticating = false);
     }
@@ -75,131 +97,170 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> with SingleTi
     if (_isAuthenticated) return widget.child;
 
     return Scaffold(
+      backgroundColor: Colors.black, // Pure black for OLED/Premium feel
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF1A237E), Color(0xFF000000)],
-          ),
+        decoration: BoxDecoration(
+          color: Colors.black,
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.accent.withOpacity(0.05),
+              blurRadius: 100,
+              spreadRadius: 10,
+            )
+          ],
         ),
         child: SafeArea(
-          child: FadeTransition(
-            opacity: _fadeAnim,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Spacer(flex: 2),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Spacer(flex: 2),
 
-                // Vault Icon with pulsating effect (simulated by design)
-                Container(
+              // Animated Shield/Lock Icon
+              ScaleTransition(
+                scale: _pulseAnim,
+                child: Container(
                   padding: const EdgeInsets.all(40),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withOpacity(0.03),
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.accent.withOpacity(0.3), width: 2),
-                    boxShadow: [
-                      BoxShadow(color: AppTheme.accent.withOpacity(0.1), blurRadius: 30, spreadRadius: 5)
+                    border: Border.all(
+                      color: AppTheme.accent.withOpacity(0.2), 
+                      width: 1.5
+                    ),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(
+                        Icons.fingerprint_rounded,
+                        size: 80,
+                        color: AppTheme.accent.withOpacity(0.8),
+                      ),
+                      // Outer rotating circle could go here for more "tech" feel
                     ],
                   ),
-                  child: Icon(
-                    Icons.security_rounded,
-                    size: 80,
-                    color: AppTheme.accent,
-                  ),
                 ),
+              ),
 
-                const SizedBox(height: 48),
+              const SizedBox(height: 48),
 
-                const Text(
-                  'SYSTEM LOCKED',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 6,
-                  ),
+              const Text(
+                'SECURE MODE',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 8,
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'AUTODEMY SECURITY PORTAL',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
-                  ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.accent.withOpacity(0.2)),
                 ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lock_outline_rounded, color: AppTheme.accent, size: 14),
+                    const SizedBox(width: 8),
+                    Text(
+                      'ENCRYPTED SESSION',
+                      style: TextStyle(
+                        color: AppTheme.accent,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-                const Spacer(),
+              const Spacer(),
 
-                // Main Unlock Button
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
+              // Main Unlock Button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 48),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.accent.withOpacity(0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      )
+                    ],
+                  ),
                   child: SizedBox(
                     width: double.infinity,
                     height: 64,
-                    child: ElevatedButton.icon(
+                    child: ElevatedButton(
                       onPressed: _isAuthenticating ? null : _authenticate,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.accent,
-                        foregroundColor: AppTheme.primary,
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                        elevation: 20,
-                        shadowColor: AppTheme.accent.withOpacity(0.4),
+                        elevation: 0,
                       ),
-                      icon: _isAuthenticating 
-                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3, color: AppTheme.primary))
-                        : const Icon(Icons.lock_open_rounded, size: 28),
-                      label: Text(
-                        _isAuthenticating ? 'VERIFYING...' : 'UNLOCK SYSTEM',
-                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 1.5),
-                      ),
+                      child: _isAuthenticating 
+                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.black))
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.fingerprint, size: 28),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'AUTHENTICATE',
+                                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5),
+                              ),
+                            ],
+                          ),
                     ),
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 24),
-                
+              const SizedBox(height: 32),
+              
+              if (_errorMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    _errorMessage,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                )
+              else
                 Text(
-                  'Uses your phone\'s PIN, Pattern, or Biometrics',
+                  'Place your finger on the sensor',
                   style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12),
                 ),
 
-                if (_errorMessage.isNotEmpty) ...[
-                  const SizedBox(height: 24),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      _errorMessage,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
+              const Spacer(flex: 2),
 
-                const Spacer(flex: 2),
-
-                // Branding at bottom
-                Opacity(
-                  opacity: 0.2,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.verified_user_rounded, color: Colors.white, size: 16),
-                      const SizedBox(width: 8),
-                      const Text('SECURED BY AUTODEMY', style: TextStyle(color: Colors.white, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
+              // Bottom Branding
+              Text(
+                'AUTODEMY INTELLIGENT SECURITY',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.2), 
+                  fontSize: 9, 
+                  letterSpacing: 3, 
+                  fontWeight: FontWeight.bold
                 ),
-                const SizedBox(height: 32),
-              ],
-            ),
+              ),
+              const SizedBox(height: 32),
+            ],
           ),
         ),
       ),
     );
   }
 }
+
