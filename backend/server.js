@@ -217,11 +217,15 @@ app.post('/api/auth/register', async (req, res) => {
         // 1. Validate with Firebase Admin (Optional but secure)
         if (firebaseUid) {
             try {
+                if (admin.apps.length === 0) {
+                    console.error('CRITICAL: Firebase Admin SDK is not initialized! Check FIREBASE_SERVICE_ACCOUNT env var.');
+                    throw new Error('Firebase Admin uninitialized');
+                }
                 const fbUser = await admin.auth().getUser(firebaseUid);
                 console.log('Firebase user verified:', fbUser.email);
             } catch (fbErr) {
                 console.error('Firebase User Validation Failed:', fbErr.message);
-                return res.status(400).json({ message: 'Invalid Firebase UID' });
+                return res.status(400).json({ message: 'Invalid Firebase UID or Sync Error: ' + fbErr.message });
             }
         }
 

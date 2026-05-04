@@ -71,6 +71,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         });
 
         if (!result['success']) {
+           // Rollback: Delete the Firebase user since backend sync failed
+           try {
+             await user.delete();
+             print('Rolled back Firebase user creation due to backend sync failure.');
+           } catch (rollbackError) {
+             print('Rollback failed: $rollbackError');
+           }
            _showError('Backend Sync Failed: ${result['message']}');
            return;
         }

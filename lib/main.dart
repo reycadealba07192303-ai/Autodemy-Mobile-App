@@ -156,7 +156,8 @@ class _AutodemyAppState extends State<AutodemyApp> with WidgetsBindingObserver {
       builder: (context, child) {
         if (widget.showBiometrics && child != null) {
           return BiometricLockScreen(
-            key: _isLocked ? UniqueKey() : null,
+            key: const ValueKey('biometric_lock'),
+            isLocked: _isLocked,
             onUnlocked: () {
               setState(() {
                 _isLocked = false;

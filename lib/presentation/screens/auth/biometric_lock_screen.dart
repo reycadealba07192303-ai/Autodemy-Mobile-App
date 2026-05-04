@@ -5,8 +5,9 @@ import '../../../core/theme/app_theme.dart';
 class BiometricLockScreen extends StatefulWidget {
   final Widget child; // The screen to show after successful auth
   final bool isOverlay; // Whether this is showing as a privacy overlay
+  final bool isLocked; // Control from parent whether it should lock
   final VoidCallback? onUnlocked;
-  const BiometricLockScreen({super.key, required this.child, this.isOverlay = false, this.onUnlocked});
+  const BiometricLockScreen({super.key, required this.child, this.isOverlay = false, this.isLocked = true, this.onUnlocked});
 
   @override
   State<BiometricLockScreen> createState() => _BiometricLockScreenState();
@@ -42,6 +43,17 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> with SingleTi
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _authenticate();
     });
+  }
+
+  @override
+  void didUpdateWidget(BiometricLockScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isLocked && !oldWidget.isLocked && _isAuthenticated) {
+      setState(() {
+        _isAuthenticated = false;
+      });
+      _authenticate();
+    }
   }
 
   @override

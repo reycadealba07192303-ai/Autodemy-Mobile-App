@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'api_service.dart';
 import 'offline_service.dart';
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 class AttendanceService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -94,16 +95,32 @@ class AttendanceService {
     required String subject,
     required String section,
   }) async {
+    // Proactive Connectivity Check for Offline Mode
+    final connectivityResult = await (Connectivity().checkConnectivity());
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      print('AUTODEMY: No internet connection detected. Queuing attendance offline.');
+      await OfflineService.queueAttendance(
+        studentName: studentName,
+        subject: subject,
+        section: section,
+      );
+      return 'queued';
+    }
+
     try {
       // 1. Sync with custom Backend (MongoDB)
-      await ApiService.markAttendance(
+      final success = await ApiService.markAttendance(
         subject: subject,
         section: section,
         studentName: studentName,
       );
+      if (!success) {
+        print('AUTODEMY: Backend sync returned false. Might be server error.');
+        // Optionally queue it anyway if we suspect it's a network glitch not caught by connectivity
+      }
     } catch (e) {
       if (e is SocketException || e.toString().contains('Failed host lookup')) {
-        // We are likely offline, queue it!
+        // We are likely offline despite connectivity check, queue it!
         await OfflineService.queueAttendance(
           studentName: studentName,
           subject: subject,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../data/app_data.dart';
+import '../../../data/services/notification_service.dart';
 
 class NotificationsScreen extends StatelessWidget {
   final String userRole; // 'STUDENT', 'TEACHER', 'ADMIN'
@@ -9,18 +9,13 @@ class NotificationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    List<AppMessage> notifications;
     Color themeColor;
     
     if (userRole == 'TEACHER') {
-      notifications = AppData.teacherNotifs;
       themeColor = AppTheme.primary;
     } else if (userRole == 'STUDENT') {
-      notifications = AppData.studentNotifs;
       themeColor = Colors.orange;
     } else {
-      // Admin notifications or system logs
-      notifications = AppData.activeAnnouncements;
       themeColor = Colors.blueGrey;
     }
 
@@ -42,23 +37,32 @@ class NotificationsScreen extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: notifications.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.all(24),
-                    itemCount: notifications.length,
-                    itemBuilder: (context, index) {
-                      final notif = notifications[index];
-                      return _buildNotificationCard(notif, themeColor);
-                    },
-                  ),
+            child: StreamBuilder<Map<String, dynamic>>(
+              stream: NotificationService.notifications,
+              builder: (context, snapshot) {
+                final notifications = NotificationService.history;
+                
+                if (notifications.isEmpty) {
+                  return _buildEmptyState();
+                }
+                
+                return ListView.builder(
+                  padding: const EdgeInsets.all(24),
+                  itemCount: notifications.length,
+                  itemBuilder: (context, index) {
+                    final notif = notifications[index];
+                    return _buildNotificationCard(notif, themeColor);
+                  },
+                );
+              }
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildNotificationCard(AppMessage notif, Color accentColor) {
+  Widget _buildNotificationCard(Map<String, dynamic> notif, Color accentColor) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
@@ -93,7 +97,7 @@ class NotificationsScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      notif.sender,
+                      notif['title'] ?? 'Notification',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
@@ -101,14 +105,14 @@ class NotificationsScreen extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      _formatTime(notif.time),
+                      _formatTime(DateTime.parse(notif['timestamp'] ?? DateTime.now().toIso8601String())),
                       style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  notif.body,
+                  notif['body'] ?? '',
                   style: const TextStyle(
                     fontSize: 14,
                     color: AppTheme.textSecondary,
@@ -141,6 +145,7 @@ class NotificationsScreen extends StatelessWidget {
 
   String _formatTime(DateTime time) {
     final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return 'Just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${time.month}/${time.day}';

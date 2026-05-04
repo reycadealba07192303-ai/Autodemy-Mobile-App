@@ -3,8 +3,10 @@ import './socket_service.dart';
 
 class NotificationService {
   static final StreamController<Map<String, dynamic>> _notificationStream = StreamController<Map<String, dynamic>>.broadcast();
+  static final List<Map<String, dynamic>> _history = [];
 
   static Stream<Map<String, dynamic>> get notifications => _notificationStream.stream;
+  static List<Map<String, dynamic>> get history => List.unmodifiable(_history);
 
   static void simulateNotification(String title, String body, {String? type, String room = 'ALL'}) {
     // Also emit to the real-time socket so other devices receive it!
@@ -33,12 +35,14 @@ class NotificationService {
   static void _handleIncoming(dynamic data) {
     print('RECEIVED NOTIFICATION: $data');
     if (data is Map) {
-      _notificationStream.add({
+      final notif = {
         'title': data['title'] ?? 'New Alert',
         'body': data['body'] ?? data['message'] ?? '',
         'type': data['type'],
         'timestamp': data['timestamp'] ?? DateTime.now().toIso8601String(),
-      });
+      };
+      _history.insert(0, notif);
+      _notificationStream.add(notif);
     }
   }
 }

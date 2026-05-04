@@ -448,9 +448,7 @@ class ApiService {
       final user = await getUserData();
       if (user == null) return [];
       
-      String endpoint = '/student/concerns';
-      if (user['role'] == 'ADMIN') endpoint = '/admin/concerns';
-      if (user['role'] == 'TEACHER') endpoint = '/teacher/concerns';
+      String endpoint = '/concerns';
 
       final response = await http.get(
         Uri.parse('$baseUrl$endpoint'),
