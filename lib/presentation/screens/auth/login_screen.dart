@@ -13,6 +13,7 @@ import '../student/student_home.dart';
 import '../support/request_support_screen.dart';
 import './forgot_password.dart';
 import './register_screen.dart';
+import '../../../data/app_data.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -47,6 +48,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final user = userCredential.user;
       if (user != null && mounted) {
+        if (!user.emailVerified) {
+          await FirebaseAuth.instance.signOut();
+          _showError('Please verify your email address before logging in. Check your inbox.');
+          setState(() => _isLoading = false);
+          return;
+        }
+
         // 2. Fetch User Profile from our Node.js Backend
         final loginResponse = await ApiService.login(inputEmail, inputPass);
         if (loginResponse != null) {
@@ -62,6 +70,21 @@ class _LoginScreenState extends State<LoginScreen> {
             'Welcome back, ${userData['name']}!',
             type: 'system',
           );
+
+          // Sync biometric state for the logged in user
+          final userId = userData['id']?.toString();
+          final userName = userData['name']?.toString();
+          bool isEnabled = false;
+          if (userId != null) {
+            isEnabled = prefs.getBool('biometric_enabled_$userId') ?? false;
+          }
+          if (!isEnabled && userName != null) {
+            isEnabled = prefs.getBool('biometric_enabled_$userName') ?? false;
+          }
+
+          AppData.isLocked.value = false; // Set unlocked first
+          AppData.biometricEnabled.value = isEnabled; // Then enable if needed
+          AppData.currentUserName.value = userData['name']?.toString() ?? '';
 
           if (!mounted) return;
           if (role == 'ADMIN') {

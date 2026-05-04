@@ -20,8 +20,8 @@ class _ReportModuleScreenState extends State<ReportModuleScreen> {
   List<String> _academicYears = [];
   List<dynamic> _allSections = [];
   List<dynamic> _filteredSections = [];
+  List<String> _dynamicStrands = [];
   bool _isLoadingData = true;
-  final List<String> _strands = ['STEM', 'ABM', 'HUMSS', 'ICT', 'GAS'];
   final List<String> _grades = ['Grade 11', 'Grade 12'];
 
   @override
@@ -44,6 +44,21 @@ class _ReportModuleScreenState extends State<ReportModuleScreen> {
     } catch (e) {
       if (mounted) setState(() => _isLoadingData = false);
     }
+  }
+
+  void _updateDynamicStrands() {
+    if (_selectedYear == null) {
+      _dynamicStrands = [];
+      return;
+    }
+    
+    setState(() {
+      _dynamicStrands = _allSections
+          .where((s) => s['academicYear'] == _selectedYear)
+          .map((s) => s['strand']?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toSet().toList();
+    });
   }
 
   void _filterSections() {
@@ -118,16 +133,22 @@ class _ReportModuleScreenState extends State<ReportModuleScreen> {
                           icon: Icons.calendar_month_rounded,
                           title: year,
                           subtitle: 'View reports for SY $year',
-                          onTap: () => setState(() => _selectedYear = year),
+                          onTap: () {
+                            setState(() => _selectedYear = year);
+                            _updateDynamicStrands();
+                          },
                         )),
                 ] else if (_selectedStrand == null) ...[
                   _buildSectionTitle('2. Select Strand'),
-                  ..._strands.map((strand) => ActionCard(
-                        icon: Icons.school_rounded,
-                        title: strand,
-                        subtitle: 'Academic Track',
-                        onTap: () => setState(() => _selectedStrand = strand),
-                      )),
+                  if (_dynamicStrands.isEmpty)
+                    const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No strands found in current sections.', style: TextStyle(color: Colors.grey))))
+                  else
+                    ..._dynamicStrands.map((strand) => ActionCard(
+                          icon: Icons.school_rounded,
+                          title: strand,
+                          subtitle: 'Academic Track',
+                          onTap: () => setState(() => _selectedStrand = strand),
+                        )),
                 ] else if (_selectedGrade == null) ...[
                   _buildSectionTitle('3. Select Grade Level'),
                   ..._grades.map((grade) => ActionCard(

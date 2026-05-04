@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/services/api_service.dart';
+import '../../../data/app_data.dart';
 import '../../widgets/custom_widgets.dart';
 
 /// Bulk CSV Upload screen for importing student/teacher accounts.
@@ -26,6 +27,7 @@ class _BulkCsvUploadScreenState extends State<BulkCsvUploadScreen> {
   String? _errorMessage;
 
   Future<void> _pickFile() async {
+    AppData.preventLock = true;
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -44,6 +46,10 @@ class _BulkCsvUploadScreenState extends State<BulkCsvUploadScreen> {
       }
     } catch (e) {
       setState(() => _errorMessage = 'Error picking file: $e');
+    } finally {
+      Future.delayed(const Duration(seconds: 1), () {
+        AppData.preventLock = false;
+      });
     }
   }
 
@@ -131,7 +137,9 @@ class _BulkCsvUploadScreenState extends State<BulkCsvUploadScreen> {
         'password': row['password'] ?? 'autodemy123',
         'role': widget.userType.toUpperCase(),
         if (row.containsKey('section')) 'section': row['section'],
+        if (row.containsKey('strand')) 'strand': row['strand'],
         if (row.containsKey('subject')) 'assignedSubject': row['subject'],
+        if (row.containsKey('schedule')) 'schedule': row['schedule'],
       };
     }).toList();
 
@@ -315,7 +323,7 @@ class _BulkCsvUploadScreenState extends State<BulkCsvUploadScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'name,email,password,idnumber,section,subject\nJohn Doe,john@email.com,pass123,2021-001,12STEM2501,Physics',
+                  'name,email,password,idnumber,section,strand,subject,schedule\nJohn Doe,john@email.com,pass123,2021-001,12STEM2501,STEM,Physics,7:30 AM - 9:00 AM',
                   style: TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 11,
@@ -326,7 +334,7 @@ class _BulkCsvUploadScreenState extends State<BulkCsvUploadScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Required: name, email, password\nOptional: idnumber, section, subject',
+                'Required: name, email, password\nOptional: idnumber, section, strand, subject, schedule',
                 style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.6), fontSize: 11),
               ),

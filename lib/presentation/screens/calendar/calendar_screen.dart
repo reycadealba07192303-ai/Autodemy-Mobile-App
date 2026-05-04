@@ -254,36 +254,43 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 Expanded(
                   child: GestureDetector(
                     onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: publishDate,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2030),
-                        builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: const ColorScheme.light(
-                                primary: AppTheme.primary,
-                                onPrimary: Colors.white,
-                                surface: Colors.white,
-                                onSurface: AppTheme.textPrimary,
-                              ),
-                              dialogTheme: DialogThemeData(
-                                elevation: 24,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-                              ),
-                              textButtonTheme: TextButtonThemeData(
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppTheme.primary,
-                                  textStyle: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+                      AppData.preventLock = true;
+                      try {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: publishDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: const ColorScheme.light(
+                                  primary: AppTheme.primary,
+                                  onPrimary: Colors.white,
+                                  surface: Colors.white,
+                                  onSurface: AppTheme.textPrimary,
+                                ),
+                                dialogTheme: DialogThemeData(
+                                  elevation: 24,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+                                ),
+                                textButtonTheme: TextButtonThemeData(
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: AppTheme.primary,
+                                    textStyle: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+                                  ),
                                 ),
                               ),
-                            ),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (picked != null) setInternalState(() => publishDate = picked);
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (picked != null) setInternalState(() => publishDate = picked);
+                      } finally {
+                        Future.delayed(const Duration(seconds: 1), () {
+                          AppData.preventLock = false;
+                        });
+                      }
                     },
                     child: Container(
                       padding: const EdgeInsets.all(16),

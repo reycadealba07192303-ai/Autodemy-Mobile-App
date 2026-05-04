@@ -7,6 +7,7 @@ const messageSchema = new mongoose.Schema({
     senderRole: { type: String },
     recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Optional for broadcasts
     body: { type: String, required: true },
+    attachmentPath: { type: String },
     timestamp: { type: Date, default: Date.now },
     isRead: { type: Boolean, default: false }
 });

@@ -76,58 +76,98 @@ class StudentHistoryScreen extends StatelessWidget {
   }
 
   Widget _buildAttendanceTab(BuildContext context) {
-    // Populated from the history parameter
-    final List<Map<String, String>> records = (history ?? []).map((h) {
-      DateTime? dt = h['date'] != null ? DateTime.parse(h['date'].toString()) : null;
-      String dateStr = dt != null ? '${_getMonthName(dt.month)} ${dt.day}, ${dt.year}' : 'Unknown Date';
-      
-      DateTime? timeDt = h['time'] != null ? DateTime.parse(h['time'].toString()) : null;
-      String timeStr = timeDt != null 
-          ? '${timeDt.hour % 12 == 0 ? 12 : timeDt.hour % 12}:${timeDt.minute.toString().padLeft(2, '0')} ${timeDt.hour >= 12 ? 'PM' : 'AM'}' 
-          : '--:--';
+    return StreamBuilder<ActiveSessionInfo?>(
+      stream: AttendanceService.streamActiveSession(
+        subject: student.subject,
+        section: student.section,
+      ),
+      builder: (context, sessionSnapshot) {
+        final activeSession = sessionSnapshot.data;
 
-      return {
-        'subject': h['subject']?.toString() ?? 'Unknown',
-        'date': dateStr,
-        'status': h['status']?.toString().toLowerCase() ?? 'absent',
-        'time': timeStr,
-      };
-    }).toList();
+        return StreamBuilder<LiveStudentRecord?>(
+          stream: activeSession == null 
+            ? Stream.value(null) 
+            : AttendanceService.streamStudentRecord(
+                subject: student.subject,
+                section: student.section,
+                studentName: student.name,
+              ),
+          builder: (context, recordSnapshot) {
+            final liveRecord = recordSnapshot.data;
+            
+            // 1. Process Historical Records
+            final List<Map<String, String>> records = (history ?? []).map((h) {
+              DateTime? dt = h['date'] != null ? DateTime.parse(h['date'].toString()).toLocal() : null;
+              String dateStr = dt != null ? '${_getMonthName(dt.month)} ${dt.day}, ${dt.year}' : 'Unknown Date';
+              
+              DateTime? timeDt = h['time'] != null ? DateTime.parse(h['time'].toString()).toLocal() : null;
+              String timeStr = timeDt != null 
+                  ? '${timeDt.hour % 12 == 0 ? 12 : timeDt.hour % 12}:${timeDt.minute.toString().padLeft(2, '0')} ${timeDt.hour >= 12 ? 'PM' : 'AM'}' 
+                  : '--:--';
 
+              return {
+                'subject': h['subject']?.toString() ?? 'Unknown',
+                'date': dateStr,
+                'status': h['status']?.toString().toLowerCase() ?? 'absent',
+                'time': timeStr,
+              };
+            }).toList();
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
-      children: [
-        // ── Overview Cards
+            // 2. Add Active Session to the top if it exists
+            if (activeSession != null) {
+              final status = liveRecord?.status ?? 'pending';
+              final now = DateTime.now();
+              
+              // Only add if not already in history (to avoid duplicates when session just ended)
+              final isAlreadyInHistory = records.any((r) => 
+                r['subject'] == activeSession.subject && 
+                r['date'] == '${_getMonthName(now.month)} ${now.day}, ${now.year}'
+              );
 
-        const SizedBox(height: 12),
+              if (!isAlreadyInHistory) {
+                records.insert(0, {
+                  'subject': activeSession.subject,
+                  'date': '${_getMonthName(now.month)} ${now.day}, ${now.year}',
+                  'status': status,
+                  'time': liveRecord?.timein ?? '--:--',
+                  'isLive': 'true',
+                });
+              }
+            }
 
-        // ── Recent Records List
-        const Text(
-          'RECENT LOGS',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textSecondary,
-            letterSpacing: 1.2,
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (records.isEmpty)
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
               children: [
-                const SizedBox(height: 40),
-                Icon(Icons.history_rounded, size: 64, color: Colors.grey.shade300),
+                // ── Recent Records List
+                const Text(
+                  'RECENT LOGS',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    letterSpacing: 1.2,
+                  ),
+                ),
                 const SizedBox(height: 16),
-                const Text('No attendance records yet.', style: TextStyle(color: Colors.grey)),
+                if (records.isEmpty)
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(height: 40),
+                        Icon(Icons.history_rounded, size: 64, color: Colors.grey.shade300),
+                        const SizedBox(height: 16),
+                        const Text('No attendance records yet.', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  )
+                else
+                  ...records.map((r) => _buildRecordTile(r)).toList(),
               ],
-            ),
-          )
-        else
-          ...records.map((r) => _buildRecordTile(r)).toList(),
-      ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -365,7 +405,16 @@ class StudentHistoryScreen extends StatelessWidget {
 
   void _handleAttendanceMarking(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
-    final isBiometricEnabled = prefs.getBool('biometric_enabled_${student.name}') ?? false;
+    final studentId = student.id;
+    final studentName = student.name;
+
+    bool isBiometricEnabled = false;
+    if (studentId != null) {
+      isBiometricEnabled = prefs.getBool('biometric_enabled_$studentId') ?? false;
+    }
+    if (!isBiometricEnabled) {
+      isBiometricEnabled = prefs.getBool('biometric_enabled_$studentName') ?? false;
+    }
 
     if (!isBiometricEnabled) {
       if (context.mounted) {
@@ -532,16 +581,22 @@ class StudentHistoryScreen extends StatelessWidget {
 
   Widget _buildRecordTile(Map<String, String> record) {
     final status = record['status']!;
+    final isLive = record['isLive'] == 'true';
+    
     final color = status == 'present'
         ? Colors.green
         : status == 'late'
         ? Colors.orange
+        : status == 'pending'
+        ? AppTheme.primary
         : Colors.red;
 
     final icon = status == 'present'
         ? Icons.check_circle_rounded
         : status == 'late'
         ? Icons.access_time_filled_rounded
+        : status == 'pending'
+        ? Icons.hourglass_top_rounded
         : Icons.cancel_rounded;
 
     return Container(
@@ -550,7 +605,7 @@ class StudentHistoryScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+        border: Border.all(color: isLive ? AppTheme.primary.withOpacity(0.3) : Colors.grey.withOpacity(0.1), width: isLive ? 1.5 : 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
@@ -574,9 +629,21 @@ class StudentHistoryScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  record['subject']!,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary),
+                Row(
+                  children: [
+                    Text(
+                      record['subject']!,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary),
+                    ),
+                    if (isLive) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
+                        child: const Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(

@@ -4,11 +4,13 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/services/api_service.dart';
 import '../support/request_support_screen.dart';
 import '../auth/login_screen.dart';
+import '../../../data/app_data.dart';
 
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:local_auth/local_auth.dart';
+import '../../../data/app_data.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String userName;
@@ -41,8 +43,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadBiometricSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    final userData = await ApiService.getUserData();
+    final userId = userData?['id']?.toString();
+    
     setState(() {
-      _biometricEnabled = prefs.getBool('biometric_enabled_${widget.userName}') ?? false;
+      bool isEnabled = false;
+      if (userId != null) {
+        isEnabled = prefs.getBool('biometric_enabled_$userId') ?? false;
+      }
+      // Fallback to name for legacy settings or Admin screen mismatch
+      if (!isEnabled) {
+        isEnabled = prefs.getBool('biometric_enabled_${widget.userName}') ?? false;
+      }
+      _biometricEnabled = isEnabled;
     });
   }
 
@@ -75,7 +88,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (didAuth) {
           setState(() => _biometricEnabled = true);
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('biometric_enabled_${widget.userName}', true);
+          final userData = await ApiService.getUserData();
+          final userId = userData?['id']?.toString() ?? widget.userName;
+
+          await prefs.setBool('biometric_enabled_$userId', true);
+          AppData.isLocked.value = false; // Ensure it's unlocked first
+          AppData.biometricEnabled.value = true; // Then enable the overlay
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('App Lock Enabled'), backgroundColor: Colors.green));
           }
@@ -93,7 +111,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } else {
       setState(() => _biometricEnabled = false);
       final prefs = await SharedPreferences.getInstance();
+      final userData = await ApiService.getUserData();
+      final userId = userData?['id']?.toString() ?? widget.userName;
+
+      await prefs.setBool('biometric_enabled_$userId', false);
+      // Also clear legacy name-based key if it exists
       await prefs.setBool('biometric_enabled_${widget.userName}', false);
+      
+      AppData.biometricEnabled.value = false;
     }
   }
 
@@ -108,19 +133,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _profileImage = File(pickedFile.path);
+    AppData.preventLock = true;
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        setState(() {
+          _profileImage = File(pickedFile.path);
+        });
+        // Save the selected image path locally
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('profile_image_${widget.userName}', pickedFile.path);
+      }
+    } finally {
+      // Extended delay to ensure OS transition is finished before re-enabling lock observer
+      Future.delayed(const Duration(seconds: 1), () {
+        AppData.preventLock = false;
       });
-      // Save the selected image path locally
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('profile_image_${widget.userName}', pickedFile.path);
     }
   }
 
   void _logout(BuildContext context) async {
+    // Reset security state on logout
+    AppData.biometricEnabled.value = false;
+    AppData.isLocked.value = true; // Default for next session
+    
     await ApiService.clearToken();
     await FirebaseAuth.instance.signOut();
     if (context.mounted) {
@@ -160,7 +197,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final success = await ApiService.updateProfile(newName);
       if (mounted) {
         if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated! Please log in again to sync changes.'), backgroundColor: Colors.green));
+          AppData.currentUserName.value = newName;
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green));
         } else {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update profile.'), backgroundColor: Colors.red));
         }
@@ -271,13 +309,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              widget.userName,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
-                              ),
+                            ValueListenableBuilder<String>(
+                              valueListenable: AppData.currentUserName,
+                              builder: (context, currentName, _) {
+                                return Text(
+                                  currentName,
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                );
+                              },
                             ),
                             const SizedBox(height: 4),
                             Container(

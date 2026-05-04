@@ -49,6 +49,11 @@ class PastSession {
 // SIMULATED CLOUD DATABASE
 // ==========================================
 class AppData {
+  // Flag to prevent biometric lock during OS-level dialogs (camera, local_auth, etc)
+  static bool preventLock = false;
+  static ValueNotifier<bool> biometricEnabled = ValueNotifier(false);
+  static ValueNotifier<String> currentUserName = ValueNotifier('');
+  static ValueNotifier<bool> isLocked = ValueNotifier(true);
   static List<String> systemChangeLogs = ['System successfully started.'];
   static List<AppMessage> adminStudentLoginLogs = [];
   static List<AppMessage> adminTeacherLoginLogs = [];
@@ -108,7 +113,16 @@ class SharedUI {
           ]),
           Row(
             children: [
-              Text('HI, $name!\nWELCOME BACK!', textAlign: TextAlign.right, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+              ValueListenableBuilder<String>(
+                valueListenable: AppData.currentUserName,
+                builder: (context, currentName, _) {
+                  return Text(
+                    'HI, $currentName!\nWELCOME BACK!',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                  );
+                },
+              ),
               if (onLogout != null) ...[
                 const SizedBox(width: 15),
                 GestureDetector(onTap: onLogout, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.shade700, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.logout, color: Colors.white, size: 20))),

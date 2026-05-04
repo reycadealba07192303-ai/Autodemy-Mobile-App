@@ -108,7 +108,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
           child: InkWell(
             onTap: _selectDate,
             child: Container(
@@ -143,7 +143,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
         ),
         if (_selectedDate != null)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
             child: ElevatedButton.icon(
               onPressed: () {
                 ReportService.generateAttendanceReport(
@@ -157,7 +157,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
               label: const Text('DOWNLOAD PDF REPORT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
-                minimumSize: const Size(double.infinity, 50),
+                minimumSize: const Size(double.infinity, 44),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),

@@ -8,6 +8,7 @@ import 'presentation/screens/auth/splash_screen.dart';
 import 'presentation/screens/auth/biometric_lock_screen.dart';
 import 'data/services/offline_service.dart';
 import 'data/services/notification_service.dart';
+import 'data/app_data.dart';
 
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
@@ -23,13 +24,25 @@ void main() async {
   // Check Biometric Preference for the last user
   final prefs = await SharedPreferences.getInstance();
   final userDataStr = prefs.getString('user_data');
-  bool showBiometrics = false;
-  
   if (userDataStr != null) {
     try {
       final userData = jsonDecode(userDataStr);
-      final userName = userData['name'];
-      showBiometrics = prefs.getBool('biometric_enabled_$userName') ?? false;
+      final userId = userData['id']?.toString();
+      final userName = userData['name']?.toString();
+      
+      // Try ID first (more reliable), then Name (legacy)
+      bool isEnabled = false;
+      if (userId != null) {
+        isEnabled = prefs.getBool('biometric_enabled_$userId') ?? false;
+      }
+      if (!isEnabled && userName != null) {
+        isEnabled = prefs.getBool('biometric_enabled_$userName') ?? false;
+      }
+      
+      AppData.biometricEnabled.value = isEnabled;
+      if (userName != null) {
+        AppData.currentUserName.value = userName;
+      }
     } catch (e) {
       debugPrint("Error parsing user data for biometrics: $e");
     }
@@ -42,7 +55,7 @@ void main() async {
     debugPrint("AUTODEMY: Firebase initialization error: $e");
   });
 
-  runApp(GlobalNotificationListener(child: AutodemyApp(showBiometrics: showBiometrics)));
+  runApp(GlobalNotificationListener(child: const AutodemyApp()));
 }
 
 class GlobalNotificationListener extends StatefulWidget {
@@ -109,22 +122,17 @@ class _GlobalNotificationListenerState extends State<GlobalNotificationListener>
 }
 
 class AutodemyApp extends StatefulWidget {
-  final bool showBiometrics;
-  const AutodemyApp({super.key, this.showBiometrics = false});
+  const AutodemyApp({super.key});
 
   @override
   State<AutodemyApp> createState() => _AutodemyAppState();
 }
 
 class _AutodemyAppState extends State<AutodemyApp> with WidgetsBindingObserver {
-  bool _isLocked = false;
-
   @override
   void initState() {
     super.initState();
-    if (widget.showBiometrics) {
-      WidgetsBinding.instance.addObserver(this);
-    }
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -135,39 +143,49 @@ class _AutodemyAppState extends State<AutodemyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!widget.showBiometrics) return;
+    if (!AppData.biometricEnabled.value) return;
 
-    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
-      // App is going to background, lock it immediately for privacy
-      setState(() {
-        _isLocked = true;
-      });
+    // ONLY lock when the app is fully backgrounded (paused)
+    // Avoid locking on 'inactive' which triggers during screenshots or system dialogs
+    if (state == AppLifecycleState.paused) {
+      if (!AppData.preventLock) {
+        // App is going to background, lock it immediately for privacy
+        AppData.isLocked.value = true;
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      scaffoldMessengerKey: scaffoldMessengerKey,
-      title: 'Autodemy',
-      theme: AppTheme.lightTheme,
-      home: const SplashScreen(),
-      builder: (context, child) {
-        if (widget.showBiometrics && child != null) {
-          return BiometricLockScreen(
-            key: const ValueKey('biometric_lock'),
-            isLocked: _isLocked,
-            onUnlocked: () {
-              setState(() {
-                _isLocked = false;
-              });
-            },
-            child: child,
-          );
-        }
-        return child ?? const SizedBox.shrink();
-      },
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppData.biometricEnabled,
+      builder: (context, isEnabled, child) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: AppData.isLocked,
+          builder: (context, isLocked, child) {
+            return MaterialApp(
+              debugShowCheckedModeBanner: false,
+              scaffoldMessengerKey: scaffoldMessengerKey,
+              title: 'Autodemy',
+              theme: AppTheme.lightTheme,
+              home: const SplashScreen(),
+              builder: (context, child) {
+                if (isEnabled && child != null) {
+                  return BiometricLockScreen(
+                    key: const ValueKey('biometric_lock'),
+                    isLocked: isLocked,
+                    onUnlocked: () {
+                      AppData.isLocked.value = false;
+                    },
+                    child: child,
+                  );
+                }
+                return child ?? const SizedBox.shrink();
+              },
+            );
+          }
+        );
+      }
     );
   }
 }

@@ -7,6 +7,7 @@ import '../../../data/models/student_model.dart';
 import '../../../data/services/attendance_service.dart';
 import '../../../data/services/api_service.dart';
 import '../../../data/services/notification_service.dart';
+import '../../../data/services/socket_service.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'ocr_scanner_screen.dart';
@@ -18,6 +19,7 @@ class LiveAttendanceScreen extends StatefulWidget {
   final String? section;     // Section Name (if not an event)
   final bool isEvent;
   final String teacherId;
+  final List<String>? initialStudents;
 
   const LiveAttendanceScreen({
     super.key,
@@ -25,6 +27,7 @@ class LiveAttendanceScreen extends StatefulWidget {
     this.section,
     this.isEvent = false,
     required this.teacherId,
+    this.initialStudents,
   });
 
   @override
@@ -52,10 +55,30 @@ class _LiveAttendanceScreenState extends State<LiveAttendanceScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // IMMEDIATELY POPULATE ROSTER FROM PASSED DATA
+    if (widget.initialStudents != null && widget.initialStudents!.isNotEmpty) {
+      _sectionStudents = widget.initialStudents!.map((name) => Student(
+        name: name,
+        section: widget.section ?? '',
+      )).toList().cast<Student>();
+      
+      _roster = widget.initialStudents!.map((name) => LiveStudentRecord(
+        name: name,
+        status: 'pending',
+        verified: true,
+      )).toList();
+    }
+    
     _buildSectionList();
   }
 
   void _buildSectionList() {
+    if (widget.initialStudents != null && widget.initialStudents!.isNotEmpty) {
+      // Data already passed from previous screen
+      return;
+    }
+
     if (widget.isEvent) {
       try {
         final event = AppData.events.firstWhere((e) => e.name == widget.targetName);
@@ -78,6 +101,13 @@ class _LiveAttendanceScreenState extends State<LiveAttendanceScreen> {
         _sectionStudents = List.from(AppData.students);
       }
     }
+
+    // Initialize roster immediately so we are never empty
+    _roster = _sectionStudents.map((s) => LiveStudentRecord(
+      name: s.name,
+      status: 'pending',
+      verified: true,
+    )).toList();
   }
 
 
@@ -87,49 +117,75 @@ class _LiveAttendanceScreenState extends State<LiveAttendanceScreen> {
     if (_isStarting) return;
     setState(() => _isStarting = true);
 
-    await AttendanceService.startSession(
-      teacherId: widget.teacherId,
-      subject: _subject,
-      section: _section,
+    try {
+      await AttendanceService.startSession(
+        teacherId: widget.teacherId,
+        subject: _subject,
+        section: _section,
+        studentNames: _sectionStudents.map<String>((s) => s.name).toList(),
+        lateThresholdMinutes: _lateThreshold,
+        absentThresholdMinutes: _absentThreshold,
+      );
 
-      studentNames: _sectionStudents.map<String>((s) => s.name).toList(),
-      lateThresholdMinutes: _lateThreshold,
-      absentThresholdMinutes: _absentThreshold,
-    );
+      AppData.addLog("A live attendance session was started for ${widget.targetName}.");
 
-    AppData.addLog("A live attendance session was started for ${widget.targetName}.");
+      NotificationService.simulateNotification(
+        'Attendance Started!',
+        'Live attendance for ${widget.targetName} is now open. Please scan or use biometrics.',
+        type: 'attendance_start'
+      );
 
-    NotificationService.simulateNotification(
-      'Attendance Started!',
-      'Live attendance for ${widget.targetName} is now open. Please scan or use biometrics.',
-      type: 'attendance_start'
-    );
+      // Replace Polling with Real-time Firestore Stream
+      _recordsSub = AttendanceService.streamSessionRecords(_subject, _section).listen(
+        (records) {
+          if (mounted) {
+            setState(() {
+              if (records.isNotEmpty) {
+                _roster = records;
+              }
+            });
+          }
+        },
+        onError: (error) {
+          debugPrint('Firestore stream error: $error');
+          // Stream errors are non-fatal; the roster still has local data
+        },
+      );
 
-    // Replace Polling with Real-time Firestore Stream
-    _recordsSub = AttendanceService.streamSessionRecords(_subject, _section).listen((records) {
+      // Sub for elapsed time calculation
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (mounted && _sessionStarted) {
+          setState(() {
+            _elapsedTime += const Duration(seconds: 1);
+          });
+        }
+      });
 
       if (mounted) {
         setState(() {
-          _roster = records;
-          // Note: Elapsed time should ideally come from a streamActiveSession subscription
+          _sessionStarted = true;
+          _isStarting = false;
+          _elapsedTime = Duration.zero;
         });
       }
-    });
-
-    // Sub for elapsed time calculation
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted && _sessionStarted) {
-        setState(() {
-          _elapsedTime += const Duration(seconds: 1);
-        });
+    } catch (e) {
+      debugPrint('Start Session Error: $e');
+      if (mounted) {
+        setState(() => _isStarting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to start session: $e'),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: 'RETRY',
+              textColor: Colors.white,
+              onPressed: _startSession,
+            ),
+          ),
+        );
       }
-    });
-
-    setState(() {
-      _sessionStarted = true;
-      _isStarting = false;
-      _elapsedTime = Duration.zero;
-    });
+    }
   }
 
   Future<void> _scanStudentQR() async {
@@ -275,8 +331,27 @@ class _LiveAttendanceScreenState extends State<LiveAttendanceScreen> {
                       section: _section,
                       newStatus: status,
                     );
+                    
+                    // Send real-time notification to the student
+                    SocketService.sendNotification({
+                      'room': _section,
+                      'title': 'Attendance Update',
+                      'body': '${record.name}, your attendance for $_subject has been marked as ${status.toUpperCase()}.',
+                      'type': 'attendance',
+                    });
+
                     AppData.addLog("Attendance for ${record.name} was manually set to $status.");
-                    if (ctx.mounted) Navigator.pop(ctx);
+                    
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Marked ${record.name} as ${status.toUpperCase()}'),
+                          backgroundColor: _statusColor(status),
+                          behavior: SnackBarBehavior.floating,
+                        )
+                      );
+                      Navigator.pop(ctx);
+                    }
                   },
                 ),
               ),
@@ -390,8 +465,16 @@ class _LiveAttendanceScreenState extends State<LiveAttendanceScreen> {
   Future<void> _requireTeacherAuth(String reason) async {
     final prefs = await SharedPreferences.getInstance();
     final user = await ApiService.getUserData();
-    final userName = user != null ? user['name'] : '';
-    final isBiometricEnabled = prefs.getBool('biometric_enabled_$userName') ?? false;
+    final userId = user?['id']?.toString();
+    final userName = user?['name']?.toString() ?? '';
+
+    bool isBiometricEnabled = false;
+    if (userId != null) {
+      isBiometricEnabled = prefs.getBool('biometric_enabled_$userId') ?? false;
+    }
+    if (!isBiometricEnabled) {
+      isBiometricEnabled = prefs.getBool('biometric_enabled_$userName') ?? false;
+    }
 
     if (!isBiometricEnabled) {
       // If biometrics not enabled in profile, proceed without it
@@ -401,10 +484,12 @@ class _LiveAttendanceScreenState extends State<LiveAttendanceScreen> {
 
     final auth = LocalAuthentication();
     try {
+      AppData.preventLock = true;
       final didAuth = await auth.authenticate(
         localizedReason: 'Teacher authorization required to finalize and sync this session.',
-        options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
+        options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
       );
+      AppData.preventLock = false;
 
       if (didAuth) {
         await _finalizeSession(reason);
@@ -414,6 +499,7 @@ class _LiveAttendanceScreenState extends State<LiveAttendanceScreen> {
         }
       }
     } catch (e) {
+      AppData.preventLock = false;
       // Fallback for devices without biometric support
       await _finalizeSession(reason);
     }
@@ -668,6 +754,12 @@ class _LiveAttendanceScreenState extends State<LiveAttendanceScreen> {
                         child: const Text('APPROVE OVERTIME', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                       ),
                     ],
+                  ] else ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      '${_roster.length} Students Pending',
+                      style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
                   ],
                 ],
               ),

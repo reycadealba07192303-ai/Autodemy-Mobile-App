@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/services/api_service.dart';
+import '../../data/app_data.dart';
 import '../screens/shared/notifications_screen.dart';
 
 
@@ -194,13 +195,23 @@ class CustomHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
+          ValueListenableBuilder<String>(
+            valueListenable: AppData.currentUserName,
+            builder: (context, name, _) {
+              // If subtitle contains the old name or is a generic greeting, we can enhance it
+              final displaySubtitle = (subtitle.contains('Hi,') || subtitle.contains('Welcome'))
+                  ? 'Hi, $name!'
+                  : subtitle;
+                  
+              return Text(
+                displaySubtitle,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -475,18 +486,15 @@ class _AddSectionDialog extends StatefulWidget {
 class _AddSectionDialogState extends State<_AddSectionDialog> {
   final _formKey = GlobalKey<FormState>();
   final _sectionNameCtrl = TextEditingController();
-  final _scheduleCtrl = TextEditingController();
-  String? _selectedSubject;
+  final _subjectCtrl = TextEditingController();
+  final _strandCtrl = TextEditingController();
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
   String? _selectedYear;
-  String? _selectedStrand;
   String? _selectedLevel;
   bool _isLoading = false;
   List<String> _academicYears = [];
 
-  final List<String> _subjects = [
-    'Mathematics', 'General Physics', 'Chemistry', 'Calculus', 'English', 'History', 'STEM Specialization'
-  ];
-  final List<String> _strands = ['STEM', 'ABM', 'HUMSS', 'ICT', 'GAS'];
   final List<String> _levels = ['Grade 11', 'Grade 12'];
 
   @override
@@ -505,32 +513,61 @@ class _AddSectionDialogState extends State<_AddSectionDialog> {
     }
   }
 
+  Future<void> _pickTime(bool isStart) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: isStart ? (_startTime ?? const TimeOfDay(hour: 7, minute: 30)) : (_endTime ?? const TimeOfDay(hour: 9, minute: 0)),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _startTime = picked;
+        } else {
+          _endTime = picked;
+        }
+      });
+    }
+  }
+
+  String _formatTime(TimeOfDay? time) {
+    if (time == null) return '--:--';
+    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
+    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute $period';
+  }
+
   @override
   void dispose() {
     _sectionNameCtrl.dispose();
-    _scheduleCtrl.dispose();
+    _subjectCtrl.dispose();
+    _strandCtrl.dispose();
     super.dispose();
   }
 
   void _handleSave() async {
     if (!_formKey.currentState!.validate() || 
-        _selectedSubject == null || 
+        _subjectCtrl.text.trim().isEmpty || 
+        _strandCtrl.text.trim().isEmpty ||
+        _startTime == null || 
+        _endTime == null ||
         _selectedYear == null || 
-        _selectedStrand == null || 
         _selectedLevel == null) {
       return;
     }
     
     setState(() => _isLoading = true);
     
+    final scheduleStr = '${_formatTime(_startTime)} - ${_formatTime(_endTime)}';
+    
     final ok = await widget.onSave({
       'teacher': widget.id,
-      'subject': _selectedSubject,
+      'subject': _subjectCtrl.text.trim(),
       'sectionName': _sectionNameCtrl.text.trim(),
       'academicYear': _selectedYear,
-      'strand': _selectedStrand,
+      'strand': _strandCtrl.text.trim(),
       'level': _selectedLevel,
-      'schedule': _scheduleCtrl.text.trim(),
+      'schedule': scheduleStr,
     });
     
     if (mounted) {
@@ -587,21 +624,39 @@ class _AddSectionDialogState extends State<_AddSectionDialog> {
                   ),
                   const SizedBox(height: 16),
                   
-                  _buildDropdownField(
-                    hint: 'Select Strand',
-                    value: _selectedStrand,
-                    items: _strands,
-                    icon: Icons.school_rounded,
-                    onChanged: (val) => setState(() => _selectedStrand = val),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: TextFormField(
+                      controller: _strandCtrl,
+                      validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                      decoration: const InputDecoration(
+                        hintText: 'Strand (e.g. STEM, ICT)',
+                        prefixIcon: Icon(Icons.school_rounded, color: Colors.teal),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   
-                  _buildDropdownField(
-                    hint: 'Select Subject',
-                    value: _selectedSubject,
-                    items: _subjects,
-                    icon: Icons.subject_rounded,
-                    onChanged: (val) => setState(() => _selectedSubject = val),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: TextFormField(
+                      controller: _subjectCtrl,
+                      validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                      decoration: const InputDecoration(
+                        hintText: 'Subject Name (e.g. Physical Science)',
+                        prefixIcon: Icon(Icons.subject_rounded, color: Colors.teal),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Container(
@@ -622,21 +677,42 @@ class _AddSectionDialogState extends State<_AddSectionDialog> {
                   ),
                   const SizedBox(height: 16),
                   
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: TextFormField(
-                      controller: _scheduleCtrl,
-                      validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
-                      decoration: const InputDecoration(
-                        hintText: 'Schedule (e.g. 7:30 AM - 9:00 AM)',
-                        prefixIcon: Icon(Icons.timer_rounded, color: Colors.teal),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _pickTime(true),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.access_time_rounded, color: Colors.teal, size: 20),
+                                const SizedBox(width: 8),
+                                Text(_startTime == null ? 'Start' : _formatTime(_startTime), style: TextStyle(fontSize: 13, color: _startTime == null ? Colors.grey : Colors.black)),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('-', style: TextStyle(fontWeight: FontWeight.bold))),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _pickTime(false),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.access_time_rounded, color: Colors.teal, size: 20),
+                                const SizedBox(width: 8),
+                                Text(_endTime == null ? 'End' : _formatTime(_endTime), style: TextStyle(fontSize: 13, color: _endTime == null ? Colors.grey : Colors.black)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   
                   const SizedBox(height: 40),
@@ -724,24 +800,23 @@ class _AddStudentSubjectDialog extends StatefulWidget {
 class _AddStudentSubjectDialogState extends State<_AddStudentSubjectDialog> {
   final _formKey = GlobalKey<FormState>();
   String? _selectedSubject;
+  String? _selectedStrand;
   String? _selectedTeacher;
   String? _selectedYear;
   String? _selectedLevel;
-  String? _selectedStrand;
   String? _selectedSection;
   List<String> _academicYears = [];
   
   List<String> _allTeachers = [];
   List<dynamic> _allSections = [];
+  List<String> _availableSubjects = [];
+  List<String> _availableStrands = [];
   List<String> _filteredTeachers = [];
   List<String> _filteredSections = [];
   bool _isLoading = false;
   bool _isFetchingData = true;
 
-  final List<String> _subjects = [
-    'Mathematics', 'General Physics', 'Chemistry', 'Calculus', 'English', 'History', 'STEM Specialization'
-  ];
-  final List<String> _strands = ['STEM', 'ABM', 'HUMSS', 'ICT', 'GAS'];
+
   final List<String> _levels = ['Grade 11', 'Grade 12'];
 
   @override
@@ -762,6 +837,17 @@ class _AddStudentSubjectDialogState extends State<_AddStudentSubjectDialog> {
               .map((u) => (u['name'] ?? 'Unknown').toString())
               .toSet().toList();
           _allSections = sections;
+          
+          // Populate dynamic subjects and strands from existing sections
+          _availableSubjects = _allSections
+              .map((s) => s['subject']?.toString() ?? '')
+              .where((s) => s.isNotEmpty)
+              .toSet().toList();
+          _availableStrands = _allSections
+              .map((s) => s['strand']?.toString() ?? '')
+              .where((s) => s.isNotEmpty)
+              .toSet().toList();
+
           _isFetchingData = false;
           _updateFilteredTeachers();
         });
@@ -779,7 +865,7 @@ class _AddStudentSubjectDialogState extends State<_AddStudentSubjectDialog> {
 
     // Get teacher names who have a section with the selected subject
     final eligibleTeacherNames = _allSections
-        .where((s) => s['subject'] == _selectedSubject)
+        .where((s) => s['subject']?.toString() == _selectedSubject)
         .map((s) => s['teacher']?['name']?.toString() ?? '')
         .where((name) => name.isNotEmpty)
         .toSet()
@@ -801,15 +887,16 @@ class _AddStudentSubjectDialogState extends State<_AddStudentSubjectDialog> {
       return;
     }
 
-    final eligibleSections = _allSections
-        .where((s) => s['subject'] == _selectedSubject && s['teacher']?['name'] == _selectedTeacher)
+    final sectionsForSubjectAndTeacher = _allSections
+        .where((s) => s['subject']?.toString() == _selectedSubject && 
+                      (s['teacher']?['name']?.toString() == _selectedTeacher))
         .map((s) => s['sectionName']?.toString() ?? '')
         .where((name) => name.isNotEmpty)
         .toSet()
         .toList();
 
     setState(() {
-      _filteredSections = eligibleSections;
+      _filteredSections = sectionsForSubjectAndTeacher;
       if (_selectedSection != null && !_filteredSections.contains(_selectedSection)) {
         _selectedSection = null;
       }
@@ -831,10 +918,10 @@ class _AddStudentSubjectDialogState extends State<_AddStudentSubjectDialog> {
   void _handleSave() async {
     if (!_formKey.currentState!.validate() || 
         _selectedSubject == null || 
+        _selectedStrand == null ||
         _selectedTeacher == null ||
         _selectedYear == null ||
         _selectedLevel == null ||
-        _selectedStrand == null ||
         _selectedSection == null) {
       return;
     }
@@ -845,7 +932,7 @@ class _AddStudentSubjectDialogState extends State<_AddStudentSubjectDialog> {
     String? schedule;
     try {
       final sectionObj = _allSections.firstWhere(
-        (s) => s['subject'] == _selectedSubject && 
+        (s) => s['subject']?.toString() == _selectedSubject && 
                s['teacher']?['name'] == _selectedTeacher &&
                s['sectionName'] == _selectedSection
       );
@@ -917,7 +1004,7 @@ class _AddStudentSubjectDialogState extends State<_AddStudentSubjectDialog> {
                   _buildDropdownField(
                     hint: 'Strand',
                     value: _selectedStrand,
-                    items: _strands,
+                    items: _availableStrands,
                     icon: Icons.school_rounded,
                     onChanged: (val) => setState(() => _selectedStrand = val),
                   ),
@@ -926,11 +1013,13 @@ class _AddStudentSubjectDialogState extends State<_AddStudentSubjectDialog> {
                   _buildDropdownField(
                     hint: 'Subject',
                     value: _selectedSubject,
-                    items: _subjects,
-                    icon: Icons.book_rounded,
+                    items: _availableSubjects,
+                    icon: Icons.subject_rounded,
                     onChanged: (val) {
-                      setState(() => _selectedSubject = val);
-                      _updateFilteredTeachers();
+                      setState(() {
+                        _selectedSubject = val;
+                        _updateFilteredTeachers();
+                      });
                     },
                   ),
                   const SizedBox(height: 16),

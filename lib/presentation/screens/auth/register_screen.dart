@@ -18,6 +18,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _authCodeController = TextEditingController();
 
   String _selectedRole = 'STUDENT'; // default role
   bool _isLoading = false;
@@ -32,17 +33,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final password = _passwordController.text.trim();
     final idNumber = _selectedRole == 'STUDENT' ? _idController.text.trim() : 'N/A';
 
-    // Enforce domain for STUDENTS (Temporarily removed)
-    /*
+    // Secret keys removed per user request - security now relies on official email domains.
+
+    // Enforce domain for Production
     if (_selectedRole == 'STUDENT') {
-      final isAllowed = email.endsWith('@shs.nu-dasma.edu.ph') || 
-                        email.endsWith('@students.national-u.edu.ph');
-      if (!isAllowed) {
-        _showError('Students must use an @shs.nu-dasma.edu.ph or @students.national-u.edu.ph email address.');
+      if (!email.endsWith('@shs.nu-dasma.edu.ph')) {
+        _showError('Students must use an @shs.nu-dasma.edu.ph email address.');
+        return;
+      }
+    } else {
+      // Teacher or Admin
+      if (!email.endsWith('@nu-dasma.edu.ph')) {
+        _showError('Faculty and Staff must use an @nu-dasma.edu.ph email address.');
         return;
       }
     }
-    */
 
     setState(() => _isLoading = true);
     FocusScope.of(context).unfocus();
@@ -83,6 +88,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         }
 
         if (!mounted) return;
+        
+        // Send email verification
+        try {
+          await user.sendEmailVerification();
+          print('Verification email sent.');
+        } catch (e) {
+          print('Failed to send verification email: $e');
+        }
         
         // 4. Show premium success dialog
         _showSuccessDialog(email);
@@ -260,6 +273,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                     ),
                     validator: (val) => val == null || val.isEmpty ? 'Enter your ID number' : null,
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  // Staff name field (Teachers/Admins) - reusing _nameController
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      labelText: 'Full Name',
+                      prefixIcon: const Icon(Icons.person_rounded, color: AppTheme.textSecondary),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    ),
+                    validator: (val) => val == null || val.isEmpty ? 'Enter your name' : null,
                   ),
                   const SizedBox(height: 16),
                 ],

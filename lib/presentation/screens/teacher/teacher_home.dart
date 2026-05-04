@@ -42,12 +42,29 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   }
 
   Future<void> _fetchTeacherData() async {
-    // MongoDB version: Will be fetched from /api/teachers/me in the future
-    if (mounted) {
-      setState(() {
-        _subjects = {};
-        _isLoading = false;
-      });
+    try {
+      // Fetch in background without blocking the whole UI with a spinner
+      final sections = await ApiService.getSections().timeout(const Duration(seconds: 10));
+      
+      final Map<String, dynamic> subjectMap = {};
+      for (var s in sections) {
+        // The backend already filters by teacher, but we can do a safety check if needed
+        final subject = s['subject'] ?? 'Unknown Subject';
+        if (!subjectMap.containsKey(subject)) {
+          subjectMap[subject] = [];
+        }
+        subjectMap[subject].add(s['sectionName']);
+      }
+
+      if (mounted) {
+        setState(() {
+          _subjects = subjectMap;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Fetch Teacher Data Error: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -68,9 +85,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       ],
       pages: [
         // ─── TAB 0: HOME ──────────────────────────────────────────────
-        _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _buildHomePage(),
+        _buildHomePage(),
         // ─── TAB 1: CONCERNS ──────────────────────────────────────────
         const TeacherConcernsScreen(),
         // ─── TAB 2: CALENDAR ──────────────────────────────────────────

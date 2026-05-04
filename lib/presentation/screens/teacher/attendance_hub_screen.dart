@@ -70,7 +70,7 @@ class AttendanceHubScreen extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 160,
+        height: 150,
         decoration: BoxDecoration(
           color: isOutlined ? Colors.white : color,
           borderRadius: BorderRadius.circular(32),
@@ -86,22 +86,22 @@ class AttendanceHubScreen extends StatelessWidget {
         child: Stack(
           children: [
             Positioned(
-              right: -20,
-              bottom: -20,
+              right: -15,
+              bottom: -15,
               child: Icon(
                 icon,
-                size: 120,
+                size: 100,
                 color: (isOutlined ? AppTheme.primary : Colors.white).withOpacity(0.1),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, color: isOutlined ? AppTheme.primary : AppTheme.primary, size: 40),
-                  const SizedBox(height: 16),
+                  Icon(icon, color: isOutlined ? AppTheme.primary : AppTheme.primary, size: 36),
+                  const SizedBox(height: 12),
                   Text(
                     title,
                     style: TextStyle(

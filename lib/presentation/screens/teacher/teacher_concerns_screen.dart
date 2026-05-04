@@ -38,12 +38,12 @@ class _TeacherConcernsScreenState extends State<TeacherConcernsScreen> {
     setState(() => _isLoading = true);
     try {
       final apiData = await ApiService.getConcerns();
-      
-      // Merge with local simulation for testing
-      final List<dynamic> localData = AppData.teacherNotifs.map((m) => {
+
+      // Merge with local data (if any exist)
+      final List<dynamic> localData = AppData.teacherNotifs.map((m) => <String, dynamic>{
         '_id': m.id,
         'status': m.status,
-        'student': {'name': m.sender},
+        'student': <String, dynamic>{'name': m.sender},
         'message': m.body,
         'createdAt': m.time.toIso8601String(),
         'attachmentPath': m.attachmentPath,
@@ -51,7 +51,6 @@ class _TeacherConcernsScreenState extends State<TeacherConcernsScreen> {
 
       if (mounted) {
         setState(() {
-          // Combine both, avoiding duplicates by ID if possible
           _concerns = [...localData, ...apiData];
           _isLoading = false;
         });
@@ -184,12 +183,19 @@ class _TeacherConcernsScreenState extends State<TeacherConcernsScreen> {
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) => Container(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            child: SingleChildScrollView(
+              child: Builder(
+                builder: (ctx) {
+                  final dynamic rawPath = concern['attachmentPath'] ?? (concern['attachments'] is List && concern['attachments'].isNotEmpty ? concern['attachments'][0] : null);
+                  
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -214,12 +220,13 @@ class _TeacherConcernsScreenState extends State<TeacherConcernsScreen> {
               ),
               const SizedBox(height: 24),
 
-              if (concern['attachmentPath'] != null && concern['attachmentPath'].toString().isNotEmpty) ...[
+              // Check for attachments (handle both string attachmentPath and list attachments)
+              if (rawPath != null && rawPath.toString().isNotEmpty) ...[
                 const Text('ATTACHMENT:', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textSecondary, letterSpacing: 1)),
                 const SizedBox(height: 12),
                 GestureDetector(
                   onTap: () {
-                    final String path = concern['attachmentPath'];
+                    final String path = rawPath.toString();
                     final bool isNetwork = path.startsWith('http');
                     
                     showDialog(
@@ -230,8 +237,18 @@ class _TeacherConcernsScreenState extends State<TeacherConcernsScreen> {
                           children: [
                             Center(
                               child: isNetwork 
-                                ? Image.network(path, loadingBuilder: (ctx, child, progress) => progress == null ? child : const CircularProgressIndicator(color: Colors.white))
-                                : Image.file(File(path)),
+                                ? Image.network(
+                                    path, 
+                                    loadingBuilder: (ctx, child, progress) => progress == null ? child : const CircularProgressIndicator(color: Colors.white),
+                                    errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image, color: Colors.white, size: 50),
+                                  )
+                                : (path.startsWith('/') 
+                                    ? Image.network(
+                                        '${ApiService.baseUrl.replaceAll('/api', '')}$path',
+                                        loadingBuilder: (ctx, child, progress) => progress == null ? child : const CircularProgressIndicator(color: Colors.white),
+                                        errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image, color: Colors.white, size: 50),
+                                      )
+                                    : Image.file(File(path), errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image, color: Colors.white, size: 50))),
                             ),
                             Positioned(
                               top: 40,
@@ -250,12 +267,22 @@ class _TeacherConcernsScreenState extends State<TeacherConcernsScreen> {
                     borderRadius: BorderRadius.circular(16),
                     child: Builder(
                       builder: (context) {
-                        final String path = concern['attachmentPath'];
+                        final String path = rawPath.toString();
                         final bool isNetwork = path.startsWith('http');
                         
                         if (isNetwork) {
                           return Image.network(
                             path,
+                            width: double.infinity,
+                            height: 200,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (ctx, child, progress) => progress == null ? child : Container(height: 200, color: Colors.grey.shade100, child: const Center(child: CircularProgressIndicator())),
+                            errorBuilder: (ctx, err, stack) => _buildErrorAttachment(),
+                          );
+                        } else if (path.startsWith('/')) {
+                          // Handle relative path from backend
+                          return Image.network(
+                            '${ApiService.baseUrl.replaceAll('/api', '')}$path',
                             width: double.infinity,
                             height: 200,
                             fit: BoxFit.cover,
@@ -338,14 +365,18 @@ class _TeacherConcernsScreenState extends State<TeacherConcernsScreen> {
                         child: const Text('APPROVE', style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
-                  ],
-                ),
-            ],
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 
   void _updateStatus(String id, String status) async {
     final success = await ApiService.updateConcernStatus(id, status);

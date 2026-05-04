@@ -1,4 +1,5 @@
 require('dotenv').config();
+// Autodemy Backend Server - Production Ready
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -296,6 +297,18 @@ app.get('/api/sections', verifyToken, async (req, res) => {
             .populate('teacher', 'name')
             .populate('students', 'name username');
         res.json(sections);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Get all students in a section by matching User.section field (fallback for empty Section.students array)
+app.get('/api/sections/students', verifyToken, async (req, res) => {
+    try {
+        const { sectionName } = req.query;
+        if (!sectionName) return res.status(400).json({ message: 'sectionName is required' });
+        const students = await User.find({ role: 'STUDENT', section: sectionName }, 'name username section');
+        res.json(students);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

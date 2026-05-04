@@ -919,7 +919,8 @@ class _AdminConcernsScreenState extends State<AdminConcernsScreen> {
       final data = await ApiService.getConcerns();
       if (mounted) {
         setState(() {
-          _concerns = data;
+          // Filter concerns targeted only to Admin
+          _concerns = data.where((c) => c['target'] == 'System Administrator').toList();
           _isLoading = false;
         });
       }

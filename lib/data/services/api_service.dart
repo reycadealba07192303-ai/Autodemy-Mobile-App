@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/config/app_config.dart';
 
 class ApiService {
-  // TIP: Use your Local IP so BOTH emulator and phone can connect.
-  static const String baseUrl = 'https://autodemy-mobile-app.onrender.com/api'; 
+  static String get baseUrl => AppConfig.apiBaseUrl;
   static Map<String, dynamic>? _cachedUser;
 
   static Future<void> setToken(String token) async {
@@ -380,6 +380,25 @@ class ApiService {
     }
   }
 
+  /// Fetches all students whose `section` field matches the given section name.
+  /// Used as a fallback when the Section document has an empty `students` array.
+  static Future<List<String>> getStudentsBySection(String sectionName) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/sections/students?sectionName=${Uri.encodeComponent(sectionName)}'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final List data = jsonDecode(response.body);
+        return data.map((s) => s['name']?.toString() ?? '').where((n) => n.isNotEmpty).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Get Students By Section Error: $e');
+      return [];
+    }
+  }
+
   static Future<bool> createSection(Map<String, dynamic> sectionData) async {
     try {
       final response = await http.post(
@@ -586,6 +605,22 @@ class ApiService {
     }
   }
 
+
+  static Future<List<dynamic>> getStudentProfessors() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/student/professors'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return [];
+    } catch (e) {
+      print('Get Student Professors Error: $e');
+      return [];
+    }
+  }
 
   static Future<Map<String, dynamic>?> getStudentSectionInfo() async {
     try {

@@ -56,7 +56,6 @@ class _StudentConcernsScreenState extends State<StudentConcernsScreen> {
   void _updateProfessors() {
     setState(() {
       _professors = {
-        'admin': 'System Administrator',
         ...?widget.teacherNames,
       };
       // Ensure default recipient is valid
@@ -247,8 +246,24 @@ class _StudentConcernsScreenState extends State<StudentConcernsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(leading: const Icon(Icons.camera_alt_rounded), title: const Text('Take a Photo'), onTap: () { Navigator.pop(context); _pickImage(ImageSource.camera); }),
-            ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Choose from Gallery'), onTap: () { Navigator.pop(context); _pickImage(ImageSource.gallery); }),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded), 
+              title: const Text('Take a Photo'), 
+              onTap: () { 
+                AppData.preventLock = true;
+                Navigator.pop(context); 
+                _pickImage(ImageSource.camera); 
+              }
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded), 
+              title: const Text('Choose from Gallery'), 
+              onTap: () { 
+                AppData.preventLock = true;
+                Navigator.pop(context); 
+                _pickImage(ImageSource.gallery); 
+              }
+            ),
           ],
         ),
       ),
@@ -256,11 +271,19 @@ class _StudentConcernsScreenState extends State<StudentConcernsScreen> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: source);
-    if (picked != null) {
-      final bytes = await picked.readAsBytes();
-      setState(() { _attachedImage = picked; _attachedImageBytes = bytes; _isDocumentAttached = true; });
+    AppData.preventLock = true;
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: source);
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        setState(() { _attachedImage = picked; _attachedImageBytes = bytes; _isDocumentAttached = true; });
+      }
+    } finally {
+      // Delay reset to allow app to resume fully from the external activity
+      Future.delayed(const Duration(seconds: 1), () {
+        AppData.preventLock = false;
+      });
     }
   }
 
@@ -283,6 +306,7 @@ class _StudentConcernsScreenState extends State<StudentConcernsScreen> {
         'category': _topic.contains('Excuse') ? 'Excuse Letter' : 'General Concern',
         'message': _msgCtrl.text.trim(),
         'target': _recipient,
+        'attachmentPath': attachmentUrl ?? _attachedImage?.path,
         'attachments': attachmentUrl != null ? [attachmentUrl] : [],
       });
 

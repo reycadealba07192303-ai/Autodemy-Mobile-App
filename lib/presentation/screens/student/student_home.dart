@@ -213,19 +213,31 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
       id: widget.student.id,
     );
 
+    // Fetch all professors assigned to this student's subjects
+    final professors = await ApiService.getStudentProfessors();
+
     if (mounted) {
       setState(() {
         _summary = summary;
         _sectionInfo = section;
         _attendanceHistory = history;
-        if (section != null && section['teacher'] != null) {
-          final teacherData = section['teacher'];
-          if (teacherData is Map) {
-            _teacherNames['subjectTeacher'] = teacherData['name'] ?? 'Assigned Teacher';
-          } else {
-            _teacherNames['subjectTeacher'] = teacherData.toString();
-          }
+        
+        // Clear old list and populate with real professors
+        _teacherNames.clear();
+        for (var prof in professors) {
+          final String name = prof['name'] ?? 'Unknown Teacher';
+          final String subject = prof['subject'] ?? 'Subject Professor';
+          // Use name as key to ensure it shows up in concerns dropdown
+          _teacherNames[name] = name; 
         }
+
+        // Fallback if no professors found from new endpoint
+        if (_teacherNames.isEmpty && section != null && section['teacher'] != null) {
+          final teacherData = section['teacher'];
+          final String name = teacherData is Map ? (teacherData['name'] ?? 'Assigned Teacher') : teacherData.toString();
+          _teacherNames['Subject Teacher'] = name;
+        }
+
         _loadingSummary = false;
       });
 
@@ -589,8 +601,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
 
     // Sort by date (descending)
     allEvents.sort((a, b) {
-      final da = a['dateTime'] as DateTime;
-      final db = b['dateTime'] as DateTime;
+      final da = a['dateTime'] is String ? DateTime.parse(a['dateTime']) : a['dateTime'] as DateTime;
+      final db = b['dateTime'] is String ? DateTime.parse(b['dateTime']) : b['dateTime'] as DateTime;
       return db.compareTo(da);
     });
 
@@ -600,7 +612,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
 
     return Column(
       children: allEvents.take(3).map((event) {
-        final date = event['dateTime'] as DateTime;
+        final date = event['dateTime'] is String ? DateTime.parse(event['dateTime']) : event['dateTime'] as DateTime;
         final dateStr = "${date.month}/${date.day}/${date.year}";
         final bool isToday = date.year == DateTime.now().year && date.month == DateTime.now().month && date.day == DateTime.now().day;
 
@@ -805,11 +817,16 @@ class _ContactFacultySheetState extends State<_ContactFacultySheet> {
 
   // ── Image helpers ─────────────────────────────────────────────────────────
   Future<void> _pickImage(ImageSource source) async {
+    AppData.preventLock = true;
     final picked = await _picker.pickImage(
       source: source,
       imageQuality: 80,
       maxWidth: 1080,
     );
+    Future.delayed(const Duration(milliseconds: 500), () {
+      AppData.preventLock = false;
+    });
+    
     if (picked != null) {
       // Show simulated cloud upload progress
       if (mounted) {
@@ -932,6 +949,7 @@ class _ContactFacultySheetState extends State<_ContactFacultySheet> {
         'message': '[$_topic]${_msgCtrl.text.isNotEmpty ? ' — ${_msgCtrl.text}' : ''}',
         'attachmentPath': attachmentUrl ?? _attachedImage?.path, // Fallback to local for simulation
         'type': _topic,
+        'target': _recipient,
       });
 
       if (success && mounted) {
@@ -1229,7 +1247,17 @@ class _LiveSessionBannerState extends State<_LiveSessionBanner> {
     
     // Check if biometric is enabled in profile
     final prefs = await SharedPreferences.getInstance();
-    final isBiometricEnabled = prefs.getBool('biometric_enabled_${widget.student.name}') ?? false;
+    final studentId = widget.student.id;
+    final studentName = widget.student.name;
+    
+    // Check both ID-based and Name-based keys for maximum reliability
+    bool isBiometricEnabled = false;
+    if (studentId != null) {
+      isBiometricEnabled = prefs.getBool('biometric_enabled_$studentId') ?? false;
+    }
+    if (!isBiometricEnabled) {
+      isBiometricEnabled = prefs.getBool('biometric_enabled_$studentName') ?? false;
+    }
 
     if (!isBiometricEnabled) {
       if (mounted) {
@@ -1252,7 +1280,7 @@ class _LiveSessionBannerState extends State<_LiveSessionBanner> {
     try {
       final authenticated = await _auth.authenticate(
         localizedReason: 'Verify identity to generate attendance QR',
-        options: const AuthenticationOptions(biometricOnly: true),
+        options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
       );
       if (authenticated) {
         if (mounted) {

@@ -26,6 +26,8 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> with SingleTi
   @override
   void initState() {
     super.initState();
+    _isAuthenticated = !widget.isLocked;
+    
     _animController = AnimationController(
       vsync: this, 
       duration: const Duration(milliseconds: 1500)
@@ -39,10 +41,12 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> with SingleTi
       CurvedAnimation(parent: _animController, curve: Curves.easeInOut)
     );
     
-    // Automatically trigger auth on start
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _authenticate();
-    });
+    // Automatically trigger auth on start if locked
+    if (widget.isLocked) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _authenticate();
+      });
+    }
   }
 
   @override
@@ -73,7 +77,7 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> with SingleTi
       final didAuth = await _auth.authenticate(
         localizedReason: 'Secure Identity Verification Required',
         options: const AuthenticationOptions(
-          biometricOnly: true, // Force biometric for the "premium" feel requested
+          biometricOnly: false, // Allow PIN/Passcode/Pattern fallbacks
           stickyAuth: true,
           useErrorDialogs: true,
         ),

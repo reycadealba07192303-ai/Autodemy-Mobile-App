@@ -32,43 +32,49 @@ class AttendanceService {
     final String sessionCode = _generateRandomCode();
     
     // 2. Maintain Real-time Firestore for live UI
-    // CLEAR OLD RECORDS FIRST to ensure a fresh start
-    final oldRecords = await _db.collection('Sessions').doc(sessionId).collection('Records').get();
-    if (oldRecords.docs.isNotEmpty) {
-      final deleteBatch = _db.batch();
-      for (var doc in oldRecords.docs) {
-        deleteBatch.delete(doc.reference);
+    try {
+      // CLEAR OLD RECORDS FIRST to ensure a fresh start
+      final oldRecords = await _db.collection('Sessions').doc(sessionId).collection('Records').get();
+      if (oldRecords.docs.isNotEmpty) {
+        final deleteBatch = _db.batch();
+        for (var doc in oldRecords.docs) {
+          deleteBatch.delete(doc.reference);
+        }
+        await deleteBatch.commit();
       }
-      await deleteBatch.commit();
-    }
 
-    await _db.collection('Sessions').doc(sessionId).set({
-      'teacherId': teacherId,
-      'subject': subject,
-      'section': section,
-      'isEvent': isEvent,
-      'startTime': FieldValue.serverTimestamp(),
-      'lateThresholdMinutes': lateThresholdMinutes,
-      'absentThresholdMinutes': absentThresholdMinutes,
-      'isActive': true,
-      'sessionCode': sessionCode,
-      'codeUpdatedAt': FieldValue.serverTimestamp(),
-    });
-
-    // Initialize all students as pending in Firestore
-    final batch = _db.batch();
-    for (String name in studentNames) {
-      final docRef = _db.collection('Sessions').doc(sessionId).collection('Records').doc(name);
-      batch.set(docRef, {
-        'studentName': name,
-        'status': 'pending',
-        'timestamp': null,
+      await _db.collection('Sessions').doc(sessionId).set({
+        'teacherId': teacherId,
+        'subject': subject,
+        'section': section,
+        'isEvent': isEvent,
+        'startTime': FieldValue.serverTimestamp(),
+        'lateThresholdMinutes': lateThresholdMinutes,
+        'absentThresholdMinutes': absentThresholdMinutes,
+        'isActive': true,
+        'sessionCode': sessionCode,
+        'codeUpdatedAt': FieldValue.serverTimestamp(),
       });
-    }
-    await batch.commit();
 
-    // Start periodic code refresh (every 15 mins)
-    _startCodeRefreshTimer(sessionId);
+      // Initialize all students as pending in Firestore
+      final batch = _db.batch();
+      for (String name in studentNames) {
+        final docRef = _db.collection('Sessions').doc(sessionId).collection('Records').doc(name);
+        batch.set(docRef, {
+          'studentName': name,
+          'status': 'pending',
+          'timestamp': null,
+        });
+      }
+      await batch.commit();
+
+      // Start periodic code refresh (every 15 mins)
+      _startCodeRefreshTimer(sessionId);
+    } catch (e) {
+      // Firestore errors are non-fatal — the MongoDB backend is the source of truth.
+      // The session can still function with manual overrides even if Firestore fails.
+      print('Firestore session setup warning: $e');
+    }
   }
 
   static String _generateRandomCode() {
@@ -297,26 +303,51 @@ class AttendanceService {
       'endReason': reason,
     });
     
-    // Convert LiveStudentRecord to map for ApiService
-    final recordsMap = records.map((r) => <String, dynamic>{
-      'studentName': r.name,
-      'status': r.status,
-      'timestamp': r.timein ?? DateTime.now().toIso8601String(),
+    // 1. Fetch the latest records DIRECTLY from Firestore to ensure we have the most recent data
+    final recordsSnapshot = await _db.collection('Sessions').doc(sessionId).collection('Records').get();
+    final List<LiveStudentRecord> latestRecords = recordsSnapshot.docs.map((doc) {
+      final data = doc.data();
+      return LiveStudentRecord(
+        name: data['studentName'] ?? doc.id,
+        status: data['status'] ?? 'pending',
+        timein: data['timestamp'] != null ? (data['timestamp'] as Timestamp).toDate().toIso8601String() : null,
+        verified: data['timestamp'] != null,
+      );
     }).toList();
-    
-    // Sync to backend MongoDB! This ensures Analytics and History get the full data.
+
+    // 2. Convert to API format & resolve PENDING to ABSENT
+    final formattedRecords = latestRecords.map((r) {
+      // KEEP PRESENT/LATE as is. Only convert PENDING to ABSENT.
+      final resolvedStatus = (r.status == 'pending' || r.status.isEmpty) ? 'absent' : r.status;
+      return {
+        'name': r.name,
+        'status': resolvedStatus,
+        'timein': r.timein,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+    }).toList();
+
+    // 3. Send to MongoDB (Permanent Record)
     await ApiService.endSession(
       subject: subject,
       section: section,
-      records: recordsMap,
-      reason: reason
+      records: formattedRecords,
+      reason: reason,
     );
-    
-    int present = records.where((r) => r.status == 'present').length;
-    int late = records.where((r) => r.status == 'late').length;
-    int absent = records.where((r) => r.status == 'absent').length;
 
-    return {'present': present, 'late': late, 'absent': absent};
+    // 3. Clear Firestore session (Cleanup)
+    final recordsRef = _db.collection('Sessions').doc(sessionId).collection('Records');
+    final docs = await recordsRef.get();
+    for (var doc in docs.docs) {
+      await doc.reference.delete();
+    }
+    
+    // Return summary count (based on resolved statuses)
+    int p = latestRecords.where((r) => r.status == 'present').length;
+    int l = latestRecords.where((r) => r.status == 'late').length;
+    int a = latestRecords.where((r) => r.status == 'pending' || r.status == 'absent').length;
+    
+    return {'present': p, 'late': l, 'absent': a};
   }
 
   static Future<void> manualOverride({

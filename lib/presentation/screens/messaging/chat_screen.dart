@@ -73,17 +73,40 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
-    if (image != null) {
-      // Simulate sending with attachment
-      final success = await ApiService.sendMessage({
-        'threadId': widget.threadId,
-        'body': '[Image Attached]',
-        'attachmentPath': image.path,
-      });
+    if (image == null) return;
 
-      if (success) {
-        _fetchHistory(silent: true);
+    setState(() => _isLoading = true);
+    
+    try {
+      // 1. Upload to server first
+      final String? uploadedUrl = await ApiService.uploadDocument(image.path);
+      
+      if (uploadedUrl != null) {
+        // 2. Send message with the official URL
+        final success = await ApiService.sendMessage({
+          'threadId': widget.threadId,
+          'body': '[Image Attached]',
+          'attachmentPath': uploadedUrl, // Official network path
+        });
+
+        if (success) {
+          _fetchHistory(silent: true);
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to upload image.')),
+          );
+        }
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -369,13 +392,72 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (msg.attachmentPath != null) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        File(msg.attachmentPath!),
-                        width: 200,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image_rounded, color: Colors.grey),
+                    GestureDetector(
+                      onTap: () {
+                        final String path = msg.attachmentPath!;
+                        final bool isNetwork = path.startsWith('http');
+                        final String imageUrl = isNetwork 
+                            ? path 
+                            : (path.startsWith('/') 
+                                ? '${ApiService.baseUrl.replaceAll('/api', '')}$path'
+                                : '${ApiService.baseUrl.replaceAll('/api', '')}/$path');
+
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => Dialog.fullscreen(
+                            backgroundColor: Colors.black,
+                            child: Stack(
+                              children: [
+                                Center(
+                                  child: isNetwork || path.startsWith('/') || path.contains('uploads')
+                                    ? Image.network(imageUrl, fit: BoxFit.contain)
+                                    : Image.file(File(path), fit: BoxFit.contain),
+                                ),
+                                Positioned(
+                                  top: 40,
+                                  right: 20,
+                                  child: IconButton(
+                                    icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                                    onPressed: () => Navigator.pop(ctx),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Builder(
+                          builder: (context) {
+                            final String path = msg.attachmentPath!;
+                            final bool isNetwork = path.startsWith('http');
+                            
+                            if (isNetwork) {
+                              return Image.network(
+                                path,
+                                width: 200,
+                                fit: BoxFit.cover,
+                                errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image_rounded, color: Colors.grey),
+                              );
+                            } else if (path.startsWith('/') || path.startsWith('uploads')) {
+                              final String fullPath = path.startsWith('/') ? path : '/$path';
+                              return Image.network(
+                                '${ApiService.baseUrl.replaceAll('/api', '')}$fullPath',
+                                width: 200,
+                                fit: BoxFit.cover,
+                                errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image_rounded, color: Colors.grey),
+                              );
+                            } else {
+                              return Image.file(
+                                File(path),
+                                width: 200,
+                                fit: BoxFit.cover,
+                                errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image_rounded, color: Colors.grey),
+                              );
+                            }
+                          },
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),

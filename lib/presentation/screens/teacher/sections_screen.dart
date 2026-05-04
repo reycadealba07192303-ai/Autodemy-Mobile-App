@@ -23,8 +23,9 @@ class _SectionsScreenState extends State<SectionsScreen> {
   }
 
   Future<void> _fetchSections() async {
+    setState(() => _isLoading = true);
     try {
-      final data = await ApiService.getSections();
+      final data = await ApiService.getSections().timeout(const Duration(seconds: 10));
       if (mounted) {
         setState(() {
           _sections = data;
@@ -32,10 +33,20 @@ class _SectionsScreenState extends State<SectionsScreen> {
         });
       }
     } catch (e) {
+      debugPrint('Fetch Sections Error: $e');
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error fetching sections: $e')),
+          SnackBar(
+            content: Text('Connection Error: $e'),
+            backgroundColor: Colors.red.shade800,
+            action: SnackBarAction(
+              label: 'RETRY',
+              textColor: Colors.white,
+              onPressed: _fetchSections,
+            ),
+            duration: const Duration(seconds: 10),
+          ),
         );
       }
     }
@@ -53,26 +64,31 @@ class _SectionsScreenState extends State<SectionsScreen> {
             showBackButton: true,
           ),
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _sections.isEmpty
-                    ? _buildEmptyState()
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(24),
-                        itemCount: _sections.length,
-                        itemBuilder: (context, index) {
-                          final section = _sections[index];
-                          final name = section['sectionName'] ?? 'Unknown Section';
-                          final subject = section['subject'] ?? 'No Subject';
-                          
-                          return ActionCard(
-                            icon: Icons.groups_rounded,
-                            title: name,
-                            subtitle: subject,
-                            onTap: () => _showAttendanceAction(context, name, subject),
-                          );
-                        },
-                      ),
+            child: RefreshIndicator(
+              onRefresh: _fetchSections,
+              color: AppTheme.primary,
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _sections.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(24),
+                          itemCount: _sections.length,
+                          itemBuilder: (context, index) {
+                            final section = _sections[index];
+                            final name = section['sectionName'] ?? 'Unknown Section';
+                            final subject = section['subject'] ?? 'No Subject';
+                            
+                            return ActionCard(
+                              icon: Icons.groups_rounded,
+                              title: name,
+                              subtitle: subject,
+                              onTap: () => _showAttendanceAction(context, name, subject),
+                            );
+                          },
+                        ),
+            ),
           ),
         ],
       ),
@@ -81,18 +97,25 @@ class _SectionsScreenState extends State<SectionsScreen> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.layers_clear_rounded, size: 64, color: Colors.grey.shade300),
-          const SizedBox(height: 16),
-          Text(
-            'No sections assigned yet.',
-            style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const Text('Contact Admin to assign sections.', style: TextStyle(color: Colors.grey, fontSize: 12)),
-        ],
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.layers_clear_rounded, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            const Text(
+              'No sections found or connection error.',
+              style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _fetchSections,
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+              child: const Text('RETRY CONNECTION'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -121,16 +144,42 @@ class _SectionsScreenState extends State<SectionsScreen> {
             Text(subject, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600)),
             const SizedBox(height: 32),
             ElevatedButton.icon(
-              onPressed: () {
+              onPressed: () async {
+                // Extract students from the selected section (Match both name and subject)
+                final selectedSection = _sections.firstWhere(
+                  (s) => s['sectionName'] == sectionName && s['subject'] == subject,
+                  orElse: () => _sections.firstWhere((s) => s['sectionName'] == sectionName)
+                );
+                final List studentsData = selectedSection['students'] ?? [];
+                
+                // DEBUG
+                debugPrint('=== SECTION DEBUG ===');
+                debugPrint('Section: $sectionName | Subject: $subject');
+                debugPrint('Students from Section doc: ${studentsData.length}');
+
+                List<String> studentNames = studentsData.map((s) {
+                  if (s is Map) return s['name']?.toString() ?? '';
+                  return s.toString();
+                }).where((n) => n.isNotEmpty && n != 'null').toList().cast<String>();
+
+                // FALLBACK: If section doc has no students, query by User.section field
+                if (studentNames.isEmpty) {
+                  debugPrint('Section doc empty — fetching via fallback API...');
+                  studentNames = await ApiService.getStudentsBySection(sectionName);
+                  debugPrint('Fallback returned: $studentNames');
+                }
+
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => LiveAttendanceScreen(
-                      targetName: subject,   // The Subject
-                      section: sectionName,  // The Section (e.g. INF223)
+                      targetName: subject,
+                      section: sectionName,
                       isEvent: false,
                       teacherId: widget.teacherId,
+                      initialStudents: studentNames,
                     ),
                   ),
                 );
