@@ -19,6 +19,15 @@ class NotificationService {
     });
   }
 
+  static void showLocalNotification(String title, String body, {String? type}) {
+    _handleIncoming({
+      'title': title,
+      'body': body,
+      'type': type,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
   // Called to start listening to the socket for notifications
   static Future<void> initialize() async {
     print('Notification Service Initialized with Socket.io');

@@ -299,7 +299,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     fillColor: Colors.white,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                   ),
-                  validator: (val) => val != null && val.length < 6 ? 'Min 6 characters' : null,
+                  validator: (val) {
+                    if (val == null || val.isEmpty) return 'Enter a password';
+                    if (val.length < 8) return 'Min 8 characters';
+                    if (!RegExp(r'[A-Z]').hasMatch(val)) return 'Requires uppercase letter';
+                    if (!RegExp(r'[a-z]').hasMatch(val)) return 'Requires lowercase letter';
+                    if (!RegExp(r'[0-9]').hasMatch(val)) return 'Requires a number';
+                    if (!RegExp(r'[!@#\$&*~]').hasMatch(val)) return 'Requires special character (!@#\$&*~)';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
 

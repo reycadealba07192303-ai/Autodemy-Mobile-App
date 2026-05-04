@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/services/api_service.dart';
+import '../../../data/services/notification_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/student_model.dart';
 import '../admin/admin_home.dart';
@@ -56,6 +57,12 @@ class _LoginScreenState extends State<LoginScreen> {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('user_data', jsonEncode(userData));
           
+          NotificationService.showLocalNotification(
+            'Login Successful',
+            'Welcome back, ${userData['name']}!',
+            type: 'system',
+          );
+
           if (!mounted) return;
           if (role == 'ADMIN') {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AdminHomeScreen()));

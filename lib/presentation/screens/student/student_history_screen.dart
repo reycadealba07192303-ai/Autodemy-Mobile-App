@@ -116,6 +116,7 @@ class StudentHistoryScreen extends StatelessWidget {
         if (records.isEmpty)
           Center(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 40),
                 Icon(Icons.history_rounded, size: 64, color: Colors.grey.shade300),
@@ -175,6 +176,7 @@ class StudentHistoryScreen extends StatelessWidget {
         if (subjects.isEmpty)
           Center(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 40),
                 Icon(Icons.class_rounded, size: 64, color: Colors.grey.shade300),

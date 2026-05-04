@@ -4,6 +4,7 @@ import 'api_service.dart';
 import 'offline_service.dart';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'notification_service.dart';
 
 class AttendanceService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -159,6 +160,13 @@ class AttendanceService {
         'status': status,
         'timestamp': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+
+      // Trigger local notification for the user
+      NotificationService.showLocalNotification(
+        'Attendance Recorded',
+        'You have successfully marked attendance for $subject - $section as ${status.toUpperCase()}.',
+        type: 'attendance',
+      );
     } catch (e) {
       // Firestore has internal offline persistence, so this usually "works" locally
     }
