@@ -145,14 +145,50 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
             child: ElevatedButton.icon(
-              onPressed: () {
-                ReportService.generateAttendanceReport(
-                  teacherName: 'Teacher (${widget.teacherId})',
-                  section: _selectedSection!,
-                  // TODO: Replace with actual fetched records from API
-                  records: [],
-                );
-              },
+                  onPressed: () {
+                    if (_selectedDate == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a date first to download the report.')),
+                      );
+                      return;
+                    }
+
+                    // Find the session for the selected date
+                    final sessionForDate = _historyRecords.firstWhere(
+                      (s) {
+                        final st = DateTime.parse(s['startTime'].toString()).toLocal();
+                        return st.year == _selectedDate!.year && st.month == _selectedDate!.month && st.day == _selectedDate!.day;
+                      },
+                      orElse: () => null,
+                    );
+
+                    if (sessionForDate == null || sessionForDate['records'] == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('No records found for the selected date.')),
+                      );
+                      return;
+                    }
+
+                    final List<dynamic> rawRecords = sessionForDate['records'];
+                    final List<Map<String, dynamic>> formattedRecords = rawRecords.map((r) {
+                      final timeDt = r['timestamp'] != null ? DateTime.parse(r['timestamp'].toString()).toLocal() : null;
+                      final timeStr = timeDt != null 
+                          ? '${timeDt.hour % 12 == 0 ? 12 : timeDt.hour % 12}:${timeDt.minute.toString().padLeft(2, '0')} ${timeDt.hour >= 12 ? 'PM' : 'AM'}'
+                          : 'N/A';
+                      
+                      return {
+                        'studentName': r['name'] ?? 'Unknown',
+                        'status': r['status'] ?? 'N/A',
+                        'timein': timeStr,
+                      };
+                    }).toList();
+
+                    ReportService.generateAttendanceReport(
+                      teacherName: 'Teacher (${widget.teacherId})',
+                      section: _selectedSection!,
+                      records: formattedRecords,
+                    );
+                  },
               icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
               label: const Text('DOWNLOAD PDF REPORT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
