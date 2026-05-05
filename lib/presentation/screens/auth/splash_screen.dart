@@ -142,22 +142,27 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               child: RotationTransition(
                 turns: _logoRotateAnimation,
                 child: Container(
-                  padding: const EdgeInsets.all(24),
+                  height: 180,
+                  width: 180,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 30,
+                        offset: const Offset(0, 15),
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.school_rounded,
-                    size: 80,
-                    color: AppTheme.primary,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/10ebdc69-cb3b-4329-a7d5-689a6a45724e.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
                   ),
                 ),
               ),
