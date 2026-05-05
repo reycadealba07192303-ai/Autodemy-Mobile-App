@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:screen_protector/screen_protector.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -1426,6 +1427,9 @@ class _StudentQRDialogState extends State<_StudentQRDialog> with SingleTickerPro
   @override
   void initState() {
     super.initState();
+    // Enable screenshot protection when QR is shown
+    ScreenProtector.preventScreenshotOn();
+    
     _updateQR();
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _updateQR());
     _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat(reverse: true);
@@ -1434,7 +1438,7 @@ class _StudentQRDialogState extends State<_StudentQRDialog> with SingleTickerPro
   void _updateQR() {
     if (mounted) {
       setState(() {
-        // STUDENT_NAME|SUBJECT|SECTION|TIMESTAMP
+        // STUDENT_NAME|SUBJECT|SECTION|TIMESTAMP|SESSION_CODE
         _qrData = '${widget.student.name}|${widget.student.subject}|${widget.student.section}|${DateTime.now().millisecondsSinceEpoch}';
       });
     }
@@ -1442,6 +1446,9 @@ class _StudentQRDialogState extends State<_StudentQRDialog> with SingleTickerPro
 
   @override
   void dispose() {
+    // Disable screenshot protection when dialog is closed
+    ScreenProtector.preventScreenshotOff();
+    
     _timer.cancel();
     _pulseController.dispose();
     super.dispose();

@@ -276,17 +276,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 16),
                 ] else ...[
-                  // Staff name field (Teachers/Admins) - reusing _nameController
+                  // Authorization Code Field for Admins/Teachers
                   TextFormField(
-                    controller: _nameController,
+                    controller: _authCodeController,
+                    obscureText: true,
                     decoration: InputDecoration(
-                      labelText: 'Full Name',
-                      prefixIcon: const Icon(Icons.person_rounded, color: AppTheme.textSecondary),
+                      labelText: 'Authorization Code',
+                      hintText: 'Enter secret key',
+                      prefixIcon: const Icon(Icons.key_rounded, color: AppTheme.textSecondary),
                       filled: true,
                       fillColor: Colors.white,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                     ),
-                    validator: (val) => val == null || val.isEmpty ? 'Enter your name' : null,
+                    validator: (val) => val == null || val.isEmpty ? 'Required for this role' : null,
                   ),
                   const SizedBox(height: 16),
                 ],
