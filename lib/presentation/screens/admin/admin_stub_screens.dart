@@ -929,6 +929,28 @@ class _AdminConcernsScreenState extends State<AdminConcernsScreen> {
     }
   }
 
+  void _updateStatus(String id, String status, String name) async {
+    final success = await ApiService.updateConcernStatus(id, status);
+    if (success) {
+      _fetchConcerns();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Concern from $name marked as $status.'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: status == 'APPROVED' ? Colors.green : Colors.red,
+        ));
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Failed to update concern status.'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.redAccent,
+        ));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -996,67 +1018,81 @@ class _AdminConcernsScreenState extends State<AdminConcernsScreen> {
   }
 
   Widget _buildConcernCard(BuildContext context, String name, String role, String id, String message, String time, Color accent, dynamic raw) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ChatScreen(
-              threadId: raw['_id'],
-              recipientName: name,
-              recipientRole: 'Student',
-              currentUserName: 'System Administrator',
-              initialMessage: message,
-              initialTopic: raw['subject'] ?? 'Support Request',
-            ),
-          ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: IntrinsicHeight(
-            child: Row(
-              children: [
-                Container(width: 6, color: accent),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary)),
-                                Text('$role • $id', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                            Text(time, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          message,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.4),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            _buildActionChip(Icons.chat_bubble_outline_rounded, 'Open Chat', Colors.indigo, onTap: () {
+    final String status = raw['status'] ?? 'PENDING';
+    
+    Color statusColor = Colors.orange;
+    if (status == 'ON-GOING') statusColor = Colors.blue;
+    if (status == 'RESOLVED' || status == 'APPROVED') statusColor = Colors.green;
+    if (status == 'REJECTED') statusColor = Colors.red;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              Container(width: 6, color: statusColor),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary)),
+                              Row(
+                                children: [
+                                  Text('$role • $id', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.bold)),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: statusColor.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      status, 
+                                      style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          Text(time, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        message,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          _buildActionChip(Icons.chat_bubble_outline_rounded, 'Open Chat', Colors.indigo, onTap: () async {
+                            // Automatically update status to ON-GOING if it's PENDING
+                            if (status == 'PENDING') {
+                              await ApiService.updateConcernStatus(raw['_id'], 'ON-GOING');
+                              _fetchConcerns(); // Refresh list
+                            }
+
+                            if (context.mounted) {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -1070,23 +1106,18 @@ class _AdminConcernsScreenState extends State<AdminConcernsScreen> {
                                   ),
                                 ),
                               );
-                            }),
-                            const SizedBox(width: 8),
-                            _buildActionChip(Icons.check_circle_outline_rounded, 'Resolve', Colors.teal, onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text('Concern from $name marked as resolved.'),
-                                behavior: SnackBarBehavior.floating,
-                                backgroundColor: AppTheme.primary,
-                              ));
-                            }),
-                          ],
-                        ),
-                      ],
-                    ),
+                            }
+                          }),
+                          const SizedBox(width: 8),
+                          if (status != 'RESOLVED' && status != 'APPROVED')
+                            _buildActionChip(Icons.check_circle_outline_rounded, 'Resolve', Colors.teal, onTap: () => _updateStatus(raw['_id'], 'RESOLVED', name)),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
