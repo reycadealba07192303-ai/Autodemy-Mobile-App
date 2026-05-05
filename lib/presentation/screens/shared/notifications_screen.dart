@@ -96,14 +96,17 @@ class NotificationsScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      notif['title'] ?? 'Notification',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: AppTheme.textPrimary,
+                    Expanded(
+                      child: Text(
+                        notif['title'] ?? 'Notification',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: AppTheme.textPrimary,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       _formatTime(DateTime.parse(notif['timestamp'] ?? DateTime.now().toIso8601String())),
                       style: TextStyle(color: Colors.grey.shade400, fontSize: 11),

@@ -37,6 +37,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
 
+  // Persistent Controllers to prevent text loss on rebuild
+  final _titleCtrl = TextEditingController();
+  final _timeCtrl = TextEditingController(text: '08:00 AM');
+  final _locCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  DateTime _publishDate = DateTime.now();
+  String _targetType = 'Overall News';
+  bool _isPublishing = false;
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _timeCtrl.dispose();
+    _locCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
   List<CalendarEvent> _getEventsForDay(DateTime day) {
     final normalizedDay = DateTime(day.year, day.month, day.day);
     
@@ -72,6 +90,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
+    _publishDate = _focusedDay;
+    _targetType = widget.userRole == 'ADMIN' ? 'Overall News' : 'Specific Section';
     _fetchCloudEvents();
   }
 
@@ -151,86 +171,83 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildCalendarView() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
-      children: [
-        const Row(
-          children: [
-            Icon(Icons.auto_awesome_mosaic_rounded, color: AppTheme.primary, size: 20),
-            SizedBox(width: 12),
-            Text(
-              'Academic Schedule',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 10)),
+    return RefreshIndicator(
+      onRefresh: _fetchCloudEvents,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.auto_awesome_mosaic_rounded, color: AppTheme.primary, size: 20),
+              SizedBox(width: 12),
+              Text(
+                'Academic Schedule',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              ),
             ],
           ),
-          padding: const EdgeInsets.all(16),
-          child: TableCalendar(
-            firstDay: DateTime.utc(2020, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
-            focusedDay: _focusedDay,
-            calendarFormat: _calendarFormat,
-            headerStyle: const HeaderStyle(
-              formatButtonVisible: false,
-              titleCentered: true,
-              titleTextStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-              leftChevronIcon: Icon(Icons.chevron_left_rounded, color: AppTheme.primary),
-              rightChevronIcon: Icon(Icons.chevron_right_rounded, color: AppTheme.primary),
+          const SizedBox(height: 24),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 10)),
+              ],
             ),
-            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-            onDaySelected: (selectedDay, focusedDay) {
-              if (!isSameDay(_selectedDay, selectedDay)) {
-                setState(() {
-                  _selectedDay = selectedDay;
-                  _focusedDay = focusedDay;
-                });
-              }
-            },
-            onFormatChanged: (format) {
-              if (_calendarFormat != format) {
-                setState(() => _calendarFormat = format);
-              }
-            },
-            onPageChanged: (focusedDay) => _focusedDay = focusedDay,
-            eventLoader: _getEventsForDay,
-            calendarStyle: CalendarStyle(
-              todayDecoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.2), shape: BoxShape.circle),
-              todayTextStyle: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold),
-              selectedDecoration: const BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
-              markerDecoration: const BoxDecoration(color: AppTheme.accent, shape: BoxShape.circle),
+            padding: const EdgeInsets.all(16),
+            child: TableCalendar(
+              firstDay: DateTime.utc(2020, 1, 1),
+              lastDay: DateTime.utc(2030, 12, 31),
+              focusedDay: _focusedDay,
+              calendarFormat: _calendarFormat,
+              headerStyle: const HeaderStyle(
+                formatButtonVisible: false,
+                titleCentered: true,
+                titleTextStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                leftChevronIcon: Icon(Icons.chevron_left_rounded, color: AppTheme.primary),
+                rightChevronIcon: Icon(Icons.chevron_right_rounded, color: AppTheme.primary),
+              ),
+              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+              onDaySelected: (selectedDay, focusedDay) {
+                if (!isSameDay(_selectedDay, selectedDay)) {
+                  setState(() {
+                    _selectedDay = selectedDay;
+                    _focusedDay = focusedDay;
+                    _publishDate = selectedDay; // Sync publish date for UX
+                  });
+                }
+              },
+              onFormatChanged: (format) {
+                if (_calendarFormat != format) {
+                  setState(() => _calendarFormat = format);
+                }
+              },
+              onPageChanged: (focusedDay) => _focusedDay = focusedDay,
+              eventLoader: _getEventsForDay,
+              calendarStyle: CalendarStyle(
+                todayDecoration: BoxDecoration(color: AppTheme.primary.withOpacity(0.2), shape: BoxShape.circle),
+                todayTextStyle: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold),
+                selectedDecoration: const BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
+                markerDecoration: const BoxDecoration(color: AppTheme.accent, shape: BoxShape.circle),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 32),
-        const Text(
-          'EVENTS & ANNOUNCEMENTS',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: AppTheme.textSecondary, letterSpacing: 1.2),
-        ),
-        const SizedBox(height: 16),
-        _buildEventList(),
-      ],
+          const SizedBox(height: 32),
+          const Text(
+            'EVENTS & ANNOUNCEMENTS',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: AppTheme.textSecondary, letterSpacing: 1.2),
+          ),
+          const SizedBox(height: 16),
+          _buildEventList(),
+        ],
+      ),
     );
   }
 
   Widget _buildPublishView() {
-    final titleCtrl = TextEditingController();
-    final timeCtrl = TextEditingController(text: '08:00 AM');
-    final locCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    DateTime publishDate = _selectedDay ?? DateTime.now();
-    String targetType = widget.userRole == 'ADMIN' ? 'Overall News' : 'Specific Section';
-
-    return StatefulBuilder(
-      builder: (context, setInternalState) => SingleChildScrollView(
+    return Builder(
+      builder: (innerContext) => SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(24, 32, 24, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,7 +262,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
             const SizedBox(height: 32),
             
-            _buildPublishField(controller: titleCtrl, label: 'Event Title', icon: Icons.title_rounded),
+            _buildPublishField(controller: _titleCtrl, label: 'Event Title', icon: Icons.title_rounded),
             const SizedBox(height: 20),
             
             // Date & Time Row
@@ -258,7 +275,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       try {
                         final picked = await showDatePicker(
                           context: context,
-                          initialDate: publishDate,
+                          initialDate: _publishDate,
                           firstDate: DateTime(2020),
                           lastDate: DateTime(2030),
                           builder: (context, child) {
@@ -274,18 +291,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                   elevation: 24,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
                                 ),
-                                textButtonTheme: TextButtonThemeData(
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: AppTheme.primary,
-                                    textStyle: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-                                  ),
-                                ),
                               ),
                               child: child!,
                             );
                           },
                         );
-                        if (picked != null) setInternalState(() => publishDate = picked);
+                        if (picked != null) setState(() => _publishDate = picked);
                       } finally {
                         Future.delayed(const Duration(seconds: 1), () {
                           AppData.preventLock = false;
@@ -304,7 +315,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           const Icon(Icons.calendar_today_rounded, color: AppTheme.primary, size: 20),
                           const SizedBox(width: 12),
                           Text(
-                            "${publishDate.month}/${publishDate.day}/${publishDate.year}",
+                            "${_publishDate.month}/${_publishDate.day}/${_publishDate.year}",
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                         ],
@@ -313,11 +324,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ),
                 ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildPublishField(controller: timeCtrl, label: 'Time', icon: Icons.access_time_rounded)),
+                Expanded(child: _buildPublishField(controller: _timeCtrl, label: 'Time', icon: Icons.access_time_rounded)),
               ],
             ),
             const SizedBox(height: 20),
-
+  
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
@@ -327,81 +338,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
-                  value: targetType,
+                  value: _targetType,
                   isExpanded: true,
                   style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
                   items: (widget.userRole == 'ADMIN' 
                     ? ['Overall News', 'Only Teachers', 'Only Students'] 
                     : ['Specific Section', 'Whole Grade Level', 'All Handled Sections']
                   ).map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                  onChanged: (v) => setInternalState(() => targetType = v!),
+                  onChanged: (v) => setState(() => _targetType = v!),
                 ),
               ),
             ),
             const SizedBox(height: 20),
             
-            _buildPublishField(controller: locCtrl, label: 'Location', icon: Icons.location_on_rounded),
+            _buildPublishField(controller: _locCtrl, label: 'Location', icon: Icons.location_on_rounded),
             const SizedBox(height: 20),
             
-            _buildPublishField(controller: descCtrl, label: 'Description', icon: Icons.description_rounded, maxLines: 4),
+            _buildPublishField(controller: _descCtrl, label: 'Description', icon: Icons.description_rounded, maxLines: 4),
             const SizedBox(height: 40),
             
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () async {
-                  if (titleCtrl.text.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a title')));
-                    return;
-                  }
-
-                  final userData = await ApiService.getUserData();
-                  final String authorName = userData?['name'] ?? 'Faculty';
-                  
-                  final day = DateTime(publishDate.year, publishDate.month, publishDate.day);
-                  final List<String> invited = (targetType == 'Specific Section' || targetType.contains('Handled')) 
-                      ? [locCtrl.text] // For now using locCtrl as section placeholder if needed
-                      : ['ALL'];
-
-                  // 1. Update Local Cache (for immediate feedback)
-                  setState(() {
-                    if (AppData.calendarEvents[day] == null) AppData.calendarEvents[day] = [];
-                    AppData.calendarEvents[day]!.add({
-                      'title': titleCtrl.text,
-                      'time': timeCtrl.text,
-                      'location': locCtrl.text,
-                      'description': descCtrl.text,
-                      'targetType': targetType,
-                      'invitedSections': invited,
-                    });
-                  });
-
-                  // 2. Sync to Cloud
-                  try {
-                    await AnnouncementService.publishAnnouncement(
-                      title: titleCtrl.text,
-                      description: descCtrl.text,
-                      time: timeCtrl.text,
-                      location: locCtrl.text,
-                      dateTime: day,
-                      invitedSections: invited,
-                      targetType: targetType,
-                      authorName: authorName,
-                      authorRole: widget.userRole,
-                    );
-                  } catch (e) {
-                    debugPrint('Cloud sync error: $e');
-                  }
-
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Event Published Successfully!'), 
-                      behavior: SnackBarBehavior.floating,
-                      backgroundColor: AppTheme.primary,
-                    ));
-                    DefaultTabController.of(context).animateTo(0);
-                  }
-                },
+                onPressed: _isPublishing ? null : () => _handlePublish(innerContext),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.accent,
                   foregroundColor: AppTheme.primary,
@@ -410,20 +369,84 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   elevation: 8,
                   shadowColor: AppTheme.accent.withOpacity(0.4),
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.rocket_launch_rounded),
-                    SizedBox(width: 12),
-                    Text('PUBLISH NOW', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.2)),
-                  ],
-                ),
+                child: _isPublishing 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.rocket_launch_rounded),
+                        SizedBox(width: 12),
+                        Text('PUBLISH NOW', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.2)),
+                      ],
+                    ),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _handlePublish(BuildContext tabContext) async {
+    if (_titleCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a title')));
+      return;
+    }
+
+    setState(() => _isPublishing = true);
+
+    try {
+      final userData = await ApiService.getUserData();
+      final String authorName = userData?['name'] ?? 'Faculty';
+      
+      final day = DateTime(_publishDate.year, _publishDate.month, _publishDate.day);
+      final List<String> invited = (_targetType == 'Specific Section' || _targetType.contains('Handled')) 
+          ? [_locCtrl.text] 
+          : ['ALL'];
+
+      // 1. Sync to Cloud
+      await AnnouncementService.publishAnnouncement(
+        title: _titleCtrl.text,
+        description: _descCtrl.text,
+        time: _timeCtrl.text,
+        location: _locCtrl.text,
+        dateTime: day,
+        invitedSections: invited,
+        targetType: _targetType,
+        authorName: authorName,
+        authorRole: widget.userRole,
+      );
+
+      // 2. Trigger a full refresh of cloud data immediately
+      await _fetchCloudEvents();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Event Published Successfully!'), 
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppTheme.primary,
+        ));
+        
+        // Reset fields
+        _titleCtrl.clear();
+        _descCtrl.clear();
+        _locCtrl.clear();
+        
+        // Use the correct context from the Builder to animate tab
+        DefaultTabController.of(tabContext).animateTo(0);
+      }
+    } catch (e) {
+      debugPrint('Cloud sync error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to publish event: $e'), 
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.redAccent,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isPublishing = false);
+    }
   }
 
   Widget _buildPublishField({
@@ -512,16 +535,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
               ],
             ),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-              ],
-            ),
             child: IntrinsicHeight(
               child: Row(
                 children: [
@@ -560,7 +573,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ],
               ),
             ),
-          ),
           ),
         );
       }),
