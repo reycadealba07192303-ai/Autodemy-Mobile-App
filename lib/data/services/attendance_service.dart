@@ -310,7 +310,7 @@ class AttendanceService {
       return LiveStudentRecord(
         name: data['studentName'] ?? doc.id,
         status: data['status'] ?? 'pending',
-        timein: data['timestamp'] != null ? (data['timestamp'] as Timestamp).toDate().toIso8601String() : null,
+        timein: data['timestamp'] != null ? (data['timestamp'] as Timestamp).toDate().toUtc().toIso8601String() : null,
         verified: data['timestamp'] != null,
       );
     }).toList();
@@ -323,7 +323,7 @@ class AttendanceService {
         'name': r.name,
         'status': resolvedStatus,
         'timein': r.timein,
-        'timestamp': DateTime.now().toIso8601String(),
+        'timestamp': r.timein ?? DateTime.now().toUtc().toIso8601String(),
       };
     }).toList();
 

@@ -32,7 +32,7 @@ class OfflineService {
       'studentName': studentName,
       'subject': subject,
       'section': section,
-      'timestamp': DateTime.now().toIso8601String(),
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
     });
     print('AUTODEMY: Attendance queued offline for $studentName');
   }

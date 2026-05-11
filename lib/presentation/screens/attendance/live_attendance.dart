@@ -20,6 +20,8 @@ class LiveAttendanceScreen extends StatefulWidget {
   final bool isEvent;
   final String teacherId;
   final List<String>? initialStudents;
+  final bool isResume;
+  final Map<String, dynamic>? activeSessionData;
 
   const LiveAttendanceScreen({
     super.key,
@@ -28,6 +30,8 @@ class LiveAttendanceScreen extends StatefulWidget {
     this.isEvent = false,
     required this.teacherId,
     this.initialStudents,
+    this.isResume = false,
+    this.activeSessionData,
   });
 
   @override
@@ -71,6 +75,43 @@ class _LiveAttendanceScreenState extends State<LiveAttendanceScreen> {
     }
     
     _buildSectionList();
+
+    if (widget.isResume && widget.activeSessionData != null) {
+      _sessionStarted = true;
+      _lateThreshold = widget.activeSessionData!['lateThresholdMinutes'] ?? 5;
+      _absentThreshold = widget.activeSessionData!['absentThresholdMinutes'] ?? 10;
+      
+      final st = widget.activeSessionData!['startTime'];
+      if (st != null) {
+         _elapsedTime = DateTime.now().difference(DateTime.parse(st.toString()).toLocal());
+      }
+      _resumeSession();
+    }
+  }
+
+  void _resumeSession() {
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (mounted && _sessionStarted) {
+          setState(() {
+            _elapsedTime += const Duration(seconds: 1);
+          });
+        }
+      });
+
+      _recordsSub = AttendanceService.streamSessionRecords(_subject, _section).listen(
+        (records) {
+          if (mounted) {
+            setState(() {
+              if (records.isNotEmpty) {
+                _roster = records;
+              }
+            });
+          }
+        },
+        onError: (error) {
+          debugPrint('Firestore stream error: $error');
+        },
+      );
   }
 
   void _buildSectionList() {

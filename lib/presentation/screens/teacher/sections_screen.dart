@@ -121,29 +121,48 @@ class _SectionsScreenState extends State<SectionsScreen> {
   }
 
   void _showAttendanceAction(BuildContext context, String sectionName, String subject) {
+    bool isChecking = true;
+    Map<String, dynamic>? activeSession;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              sectionName,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-            ),
-            const SizedBox(height: 4),
-            Text(subject, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          if (isChecking) {
+            ApiService.getActiveSession(subject, sectionName).then((session) {
+              if (ctx.mounted) {
+                setModalState(() {
+                  activeSession = session;
+                  isChecking = false;
+                });
+              }
+            });
+          }
+
+          return Container(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  sectionName,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                ),
+                const SizedBox(height: 4),
+                Text(subject, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 32),
+                if (isChecking)
+                  const CircularProgressIndicator()
+                else
+                  ElevatedButton.icon(
               onPressed: () async {
                 // Extract students from the selected section (Match both name and subject)
                 final selectedSection = _sections.firstWhere(
@@ -180,12 +199,14 @@ class _SectionsScreenState extends State<SectionsScreen> {
                       isEvent: false,
                       teacherId: widget.teacherId,
                       initialStudents: studentNames,
+                      isResume: activeSession != null,
+                      activeSessionData: activeSession,
                     ),
                   ),
                 );
               },
-              icon: const Icon(Icons.fact_check_rounded),
-              label: const Text('TAKE ATTENDANCE'),
+              icon: Icon(activeSession != null ? Icons.restore_rounded : Icons.fact_check_rounded),
+              label: Text(activeSession != null ? 'RESUME SESSION' : 'TAKE ATTENDANCE'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.accent,
                 foregroundColor: AppTheme.primary,
@@ -201,7 +222,8 @@ class _SectionsScreenState extends State<SectionsScreen> {
             ),
           ],
         ),
-      ),
+      );
+    }),
     );
   }
 }

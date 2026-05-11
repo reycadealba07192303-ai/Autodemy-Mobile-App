@@ -177,7 +177,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                           : 'N/A';
                       
                       return {
-                        'studentName': r['name'] ?? 'Unknown',
+                        'studentName': r['studentName'] ?? 'Unknown',
                         'status': r['status'] ?? 'N/A',
                         'timein': timeStr,
                       };

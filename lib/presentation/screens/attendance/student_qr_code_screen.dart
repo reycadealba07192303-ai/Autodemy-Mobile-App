@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:screen_protector/screen_protector.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/services/attendance_service.dart';
 
@@ -38,6 +39,7 @@ class _StudentQRCodeScreenState extends State<StudentQRCodeScreen> with TickerPr
   @override
   void initState() {
     super.initState();
+    ScreenProtector.preventScreenshotOn();
     _refreshQR();
     _startTimer();
     _listenForStatus();
@@ -82,6 +84,7 @@ class _StudentQRCodeScreenState extends State<StudentQRCodeScreen> with TickerPr
 
   @override
   void dispose() {
+    ScreenProtector.preventScreenshotOff();
     _timer.cancel();
     _statusSub?.cancel();
     _bgController.dispose();

@@ -137,7 +137,7 @@ class ApiService {
           'subject': subject,
           'section': section,
           if (studentName != null) 'studentName': studentName,
-          if (timestamp != null) 'timestamp': timestamp.toIso8601String(),
+          if (timestamp != null) 'timestamp': timestamp.toUtc().toIso8601String(),
         }),
       );
       return response.statusCode == 200;
